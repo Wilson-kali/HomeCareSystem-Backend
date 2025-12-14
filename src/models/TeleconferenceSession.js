@@ -1,27 +1,37 @@
 const { DataTypes } = require('sequelize');
+const sequelize = require('../config/database');
 
-module.exports = (sequelize) => {
-  const TeleconferenceSession = sequelize.define('TeleconferenceSession', {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true
-    },
-    appointmentId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: { model: 'Appointments', key: 'id' }
-    },
-    roomName: {
-      type: DataTypes.STRING,
-      allowNull: false
-    },
-    startedAt: DataTypes.DATE,
-    endedAt: DataTypes.DATE,
-    recordingUrl: DataTypes.STRING,
-    transcription: DataTypes.TEXT,
-    chatHistory: DataTypes.JSON
-  });
+const TeleconferenceSession = sequelize.define('TeleconferenceSession', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  appointmentId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { model: 'Appointments', key: 'id' }
+  },
+  roomId: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true
+  },
+  startTime: {
+    type: DataTypes.DATE
+  },
+  endTime: {
+    type: DataTypes.DATE
+  },
+  recordingUrl: {
+    type: DataTypes.STRING
+  },
+  transcription: {
+    type: DataTypes.TEXT
+  },
+  chatHistory: {
+    type: DataTypes.JSON
+  }
+});
 
-  return TeleconferenceSession;
-};
+module.exports = TeleconferenceSession;

@@ -18,14 +18,17 @@ const fileFilter = (req, file, cb) => {
 
   if (mimetype && extname) {
     return cb(null, true);
+  } else {
+    cb(new Error('Invalid file type'));
   }
-  cb(new Error('Invalid file type'));
 };
 
 const upload = multer({
   storage,
-  limits: { fileSize: parseInt(process.env.MAX_FILE_SIZE) || 10485760 },
+  limits: {
+    fileSize: parseInt(process.env.MAX_FILE_SIZE) || 10485760 // 10MB
+  },
   fileFilter
 });
 
-module.exports = upload;
+module.exports = { upload };

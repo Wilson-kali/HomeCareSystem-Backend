@@ -1,26 +1,38 @@
 const { DataTypes } = require('sequelize');
+const sequelize = require('../config/database');
 
-module.exports = (sequelize) => {
-  const Patient = sequelize.define('Patient', {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true
-    },
-    userId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: { model: 'Users', key: 'id' }
-    },
-    dateOfBirth: DataTypes.DATE,
-    address: DataTypes.TEXT,
-    emergencyContact: DataTypes.STRING,
-    medicalHistory: DataTypes.TEXT,
-    currentStatus: {
-      type: DataTypes.ENUM('stable', 'improving', 'deteriorating', 'critical', 'cured', 'deceased'),
-      defaultValue: 'stable'
-    }
-  });
+const Patient = sequelize.define('Patient', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  userId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { model: 'Users', key: 'id' }
+  },
+  dateOfBirth: {
+    type: DataTypes.DATE,
+    allowNull: false
+  },
+  address: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  emergencyContact: {
+    type: DataTypes.STRING,
+    allowNull: false
+  },
+  medicalHistory: {
+    type: DataTypes.TEXT
+  },
+  currentMedications: {
+    type: DataTypes.TEXT
+  },
+  allergies: {
+    type: DataTypes.TEXT
+  }
+});
 
-  return Patient;
-};
+module.exports = Patient;

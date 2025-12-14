@@ -1,37 +1,43 @@
 const { DataTypes } = require('sequelize');
+const sequelize = require('../config/database');
 
-module.exports = (sequelize) => {
-  const CaregiverRecommendation = sequelize.define('CaregiverRecommendation', {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true
-    },
-    physicianId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: { model: 'PrimaryPhysicians', key: 'id' }
-    },
-    patientId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: { model: 'Patients', key: 'id' }
-    },
-    caregiverId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: { model: 'Caregivers', key: 'id' }
-    },
-    specialtyId: {
-      type: DataTypes.UUID,
-      references: { model: 'Specialties', key: 'id' }
-    },
-    reason: DataTypes.TEXT,
-    status: {
-      type: DataTypes.ENUM('pending', 'accepted', 'declined'),
-      defaultValue: 'pending'
-    }
-  });
+const CaregiverRecommendation = sequelize.define('CaregiverRecommendation', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  physicianId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { model: 'PrimaryPhysicians', key: 'id' }
+  },
+  patientId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { model: 'Patients', key: 'id' }
+  },
+  caregiverId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { model: 'Caregivers', key: 'id' }
+  },
+  specialtyId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { model: 'Specialties', key: 'id' }
+  },
+  reason: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  isAccepted: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: null
+  },
+  acceptedAt: {
+    type: DataTypes.DATE
+  }
+});
 
-  return CaregiverRecommendation;
-};
+module.exports = CaregiverRecommendation;

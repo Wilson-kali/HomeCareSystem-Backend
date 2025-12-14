@@ -1,40 +1,48 @@
 const { DataTypes } = require('sequelize');
+const sequelize = require('../config/database');
+const { PATIENT_STATUS } = require('../utils/constants');
 
-module.exports = (sequelize) => {
-  const CareSessionReport = sequelize.define('CareSessionReport', {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true
-    },
-    appointmentId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: { model: 'Appointments', key: 'id' }
-    },
-    caregiverId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: { model: 'Caregivers', key: 'id' }
-    },
-    patientId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: { model: 'Patients', key: 'id' }
-    },
-    observations: {
-      type: DataTypes.TEXT,
-      allowNull: false
-    },
-    interventions: DataTypes.TEXT,
-    vitals: DataTypes.JSON,
-    sessionSummary: DataTypes.TEXT,
-    patientStatus: {
-      type: DataTypes.ENUM('stable', 'improving', 'deteriorating', 'critical', 'cured', 'deceased'),
-      allowNull: false
-    },
-    attachments: DataTypes.JSON
-  });
+const CareSessionReport = sequelize.define('CareSessionReport', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  appointmentId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { model: 'Appointments', key: 'id' }
+  },
+  observations: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  interventions: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  vitals: {
+    type: DataTypes.JSON
+  },
+  patientStatus: {
+    type: DataTypes.ENUM,
+    values: Object.values(PATIENT_STATUS),
+    allowNull: false
+  },
+  sessionSummary: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  recommendations: {
+    type: DataTypes.TEXT
+  },
+  followUpRequired: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+  attachments: {
+    type: DataTypes.JSON
+  }
+});
 
-  return CareSessionReport;
-};
+module.exports = CareSessionReport;

@@ -1,39 +1,52 @@
 const nodemailer = require('nodemailer');
 const emailConfig = require('../config/email');
+const logger = require('../utils/logger');
 
 const transporter = nodemailer.createTransport(emailConfig);
 
-const sendEmail = async ({ to, subject, html, text }) => {
+const sendEmail = async (to, subject, html) => {
   try {
-    await transporter.sendMail({
-      from: process.env.EMAIL_FROM,
+    const info = await transporter.sendMail({
+      from: emailConfig.from,
       to,
       subject,
-      html,
-      text
+      html
     });
-    return { success: true };
+    
+    logger.info(`Email sent: ${info.messageId}`);
+    return info;
   } catch (error) {
-    console.error('Email error:', error);
+    logger.error('Email sending failed:', error);
     throw error;
   }
 };
 
-const sendAppointmentConfirmation = async (appointment, patient, caregiver) => {
+const sendAppointmentConfirmation = async (patientEmail, appointmentDetails) => {
+  const subject = 'Appointment Confirmation - Home Care System';
   const html = `
     <h2>Appointment Confirmed</h2>
-    <p>Your appointment has been scheduled for ${appointment.scheduledAt}</p>
-    <p>Caregiver: ${caregiver.firstName} ${caregiver.lastName}</p>
+    <p>Your appointment has been confirmed for ${appointmentDetails.scheduledDate}</p>
+    <p>Caregiver: ${appointmentDetails.caregiverName}</p>
+    <p>Type: ${appointmentDetails.sessionType}</p>
   `;
-  return sendEmail({ to: patient.email, subject: 'Appointment Confirmation', html });
+  
+  return sendEmail(patientEmail, subject, html);
 };
 
-const sendStatusAlert = async (patient, status) => {
+const sendStatusAlert = async (recipientEmail, alertDetails) => {
+  const subject = `Patient Status Alert - ${alertDetails.severity.toUpperCase()}`;
   const html = `
     <h2>Patient Status Alert</h2>
-    <p>Patient ${patient.firstName} ${patient.lastName} status: ${status}</p>
+    <p><strong>Severity:</strong> ${alertDetails.severity}</p>
+    <p><strong>Patient:</strong> ${alertDetails.patientName}</p>
+    <p><strong>Message:</strong> ${alertDetails.message}</p>
   `;
-  return sendEmail({ to: patient.email, subject: 'Status Alert', html });
+  
+  return sendEmail(recipientEmail, subject, html);
 };
 
-module.exports = { sendEmail, sendAppointmentConfirmation, sendStatusAlert };
+module.exports = {
+  sendEmail,
+  sendAppointmentConfirmation,
+  sendStatusAlert
+};

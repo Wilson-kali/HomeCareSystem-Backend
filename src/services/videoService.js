@@ -1,35 +1,53 @@
-const twilio = require('twilio');
+const { TeleconferenceSession } = require('../models');
+const { generateToken } = require('../utils/helpers');
 
-const AccessToken = twilio.jwt.AccessToken;
-const VideoGrant = AccessToken.VideoGrant;
-
-const generateVideoToken = (identity, roomName) => {
-  const token = new AccessToken(
-    process.env.TWILIO_ACCOUNT_SID,
-    process.env.TWILIO_API_KEY_SID,
-    process.env.TWILIO_API_KEY_SECRET
-  );
-
-  token.identity = identity;
-  const videoGrant = new VideoGrant({ room: roomName });
-  token.addGrant(videoGrant);
-
-  return token.toJwt();
-};
-
-const createRoom = async (roomName) => {
-  const client = twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+// Mock video service - Replace with actual video service integration
+const createVideoRoom = async (appointmentId) => {
   try {
-    const room = await client.video.rooms.create({
-      uniqueName: roomName,
-      type: 'group',
-      recordParticipantsOnConnect: true
+    const roomName = `appointment-${appointmentId}-${Date.now()}`;
+    const roomId = generateToken(16);
+    
+    await TeleconferenceSession.create({
+      appointmentId,
+      roomId
     });
-    return room;
+
+    return {
+      sid: roomId,
+      uniqueName: roomName,
+      status: 'in-progress'
+    };
   } catch (error) {
-    console.error('Room creation error:', error);
-    throw error;
+    throw new Error(`Video room creation failed: ${error.message}`);
   }
 };
 
-module.exports = { generateVideoToken, createRoom };
+const generateAccessToken = (roomName, identity) => {
+  // Mock token generation - Replace with actual video service
+  const mockToken = Buffer.from(JSON.stringify({
+    room: roomName,
+    identity,
+    exp: Date.now() + (24 * 60 * 60 * 1000) // 24 hours
+  })).toString('base64');
+  
+  return mockToken;
+};
+
+const endVideoRoom = async (roomSid) => {
+  try {
+    // Mock room ending - Replace with actual video service
+    return {
+      sid: roomSid,
+      status: 'completed',
+      endTime: new Date()
+    };
+  } catch (error) {
+    throw new Error(`Failed to end video room: ${error.message}`);
+  }
+};
+
+module.exports = {
+  createVideoRoom,
+  generateAccessToken,
+  endVideoRoom
+};

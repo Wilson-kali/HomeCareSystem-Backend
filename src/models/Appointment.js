@@ -1,41 +1,52 @@
 const { DataTypes } = require('sequelize');
+const sequelize = require('../config/database');
+const { APPOINTMENT_STATUS, SESSION_TYPE } = require('../utils/constants');
 
-module.exports = (sequelize) => {
-  const Appointment = sequelize.define('Appointment', {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true
-    },
-    patientId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: { model: 'Patients', key: 'id' }
-    },
-    caregiverId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: { model: 'Caregivers', key: 'id' }
-    },
-    scheduledAt: {
-      type: DataTypes.DATE,
-      allowNull: false
-    },
-    duration: {
-      type: DataTypes.INTEGER,
-      defaultValue: 60
-    },
-    type: {
-      type: DataTypes.ENUM('in-person', 'teleconference'),
-      allowNull: false
-    },
-    status: {
-      type: DataTypes.ENUM('pending', 'confirmed', 'completed', 'cancelled'),
-      defaultValue: 'pending'
-    },
-    notes: DataTypes.TEXT,
-    location: DataTypes.STRING
-  });
+const Appointment = sequelize.define('Appointment', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  patientId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { model: 'Patients', key: 'id' }
+  },
+  caregiverId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { model: 'Caregivers', key: 'id' }
+  },
+  specialtyId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { model: 'Specialties', key: 'id' }
+  },
+  scheduledDate: {
+    type: DataTypes.DATE,
+    allowNull: false
+  },
+  duration: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
+  sessionType: {
+    type: DataTypes.ENUM,
+    values: Object.values(SESSION_TYPE),
+    allowNull: false
+  },
+  status: {
+    type: DataTypes.ENUM,
+    values: Object.values(APPOINTMENT_STATUS),
+    defaultValue: APPOINTMENT_STATUS.PENDING
+  },
+  notes: {
+    type: DataTypes.TEXT
+  },
+  totalCost: {
+    type: DataTypes.DECIMAL(10, 2)
+  }
+});
 
-  return Appointment;
-};
+module.exports = Appointment;

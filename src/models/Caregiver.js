@@ -1,36 +1,49 @@
 const { DataTypes } = require('sequelize');
+const sequelize = require('../config/database');
+const { VERIFICATION_STATUS } = require('../utils/constants');
 
-module.exports = (sequelize) => {
-  const Caregiver = sequelize.define('Caregiver', {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true
-    },
-    userId: {
-      type: DataTypes.UUID,
-      allowNull: false,
-      references: { model: 'Users', key: 'id' }
-    },
-    licenseNumber: DataTypes.STRING,
-    yearsOfExperience: DataTypes.INTEGER,
-    bio: DataTypes.TEXT,
-    hourlyRate: DataTypes.DECIMAL(10, 2),
-    availability: DataTypes.JSON,
-    verificationStatus: {
-      type: DataTypes.ENUM('pending', 'verified', 'rejected'),
-      defaultValue: 'pending'
-    },
-    verifiedBy: {
-      type: DataTypes.UUID,
-      references: { model: 'Users', key: 'id' }
-    },
-    verifiedAt: DataTypes.DATE,
-    rating: {
-      type: DataTypes.DECIMAL(3, 2),
-      defaultValue: 0
-    }
-  });
+const Caregiver = sequelize.define('Caregiver', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  userId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { model: 'Users', key: 'id' }
+  },
+  licenseNumber: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true
+  },
+  experience: {
+    type: DataTypes.INTEGER,
+    allowNull: false
+  },
+  qualifications: {
+    type: DataTypes.TEXT,
+    allowNull: false
+  },
+  verificationStatus: {
+    type: DataTypes.ENUM,
+    values: Object.values(VERIFICATION_STATUS),
+    defaultValue: VERIFICATION_STATUS.PENDING
+  },
+  hourlyRate: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false
+  },
+  availability: {
+    type: DataTypes.JSON
+  },
+  bio: {
+    type: DataTypes.TEXT
+  },
+  profileImage: {
+    type: DataTypes.STRING
+  }
+});
 
-  return Caregiver;
-};
+module.exports = Caregiver;

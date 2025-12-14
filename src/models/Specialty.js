@@ -1,23 +1,24 @@
 const { DataTypes } = require('sequelize');
+const sequelize = require('../config/database');
 
-module.exports = (sequelize) => {
-  const Specialty = sequelize.define('Specialty', {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true
-    },
-    name: {
-      type: DataTypes.STRING,
-      allowNull: false,
-      unique: true
-    },
-    description: DataTypes.TEXT,
-    isActive: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: true
-    }
-  });
+const Specialty = sequelize.define('Specialty', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
+  name: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true
+  },
+  description: {
+    type: DataTypes.TEXT
+  },
+  isActive: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
+  }
+});
 
-  return Specialty;
-};
+module.exports = Specialty;

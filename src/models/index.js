@@ -1,62 +1,74 @@
-const { Sequelize } = require('sequelize');
-const dbConfig = require('../config/database');
+const sequelize = require('../config/database');
+const User = require('./User');
+const Patient = require('./Patient');
+const Caregiver = require('./Caregiver');
+const PrimaryPhysician = require('./PrimaryPhysician');
+const Specialty = require('./Specialty');
+const Appointment = require('./Appointment');
+const TeleconferenceSession = require('./TeleconferenceSession');
+const CareSessionReport = require('./CareSessionReport');
+const PaymentTransaction = require('./PaymentTransaction');
+const CaregiverRecommendation = require('./CaregiverRecommendation');
+const StatusAlert = require('./StatusAlert');
 
-const sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.password, {
-  host: dbConfig.host,
-  port: dbConfig.port,
-  dialect: dbConfig.dialect,
-  logging: dbConfig.logging,
-  pool: dbConfig.pool
-});
+// Define associations
+User.hasOne(Patient, { foreignKey: 'userId' });
+Patient.belongsTo(User, { foreignKey: 'userId' });
 
-const db = {};
+User.hasOne(Caregiver, { foreignKey: 'userId' });
+Caregiver.belongsTo(User, { foreignKey: 'userId' });
 
-db.Sequelize = Sequelize;
-db.sequelize = sequelize;
+User.hasOne(PrimaryPhysician, { foreignKey: 'userId' });
+PrimaryPhysician.belongsTo(User, { foreignKey: 'userId' });
 
-db.User = require('./User')(sequelize);
-db.Patient = require('./Patient')(sequelize);
-db.Specialty = require('./Specialty')(sequelize);
-db.Caregiver = require('./Caregiver')(sequelize);
-db.PrimaryPhysician = require('./PrimaryPhysician')(sequelize);
-db.Appointment = require('./Appointment')(sequelize);
-db.TeleconferenceSession = require('./TeleconferenceSession')(sequelize);
-db.CareSessionReport = require('./CareSessionReport')(sequelize);
-db.PaymentTransaction = require('./PaymentTransaction')(sequelize);
-db.CaregiverRecommendation = require('./CaregiverRecommendation')(sequelize);
-db.StatusAlert = require('./StatusAlert')(sequelize);
+// Caregiver-Specialty many-to-many
+Caregiver.belongsToMany(Specialty, { through: 'CaregiverSpecialties' });
+Specialty.belongsToMany(Caregiver, { through: 'CaregiverSpecialties' });
 
-// Associations
-db.User.hasOne(db.Patient, { foreignKey: 'userId' });
-db.Patient.belongsTo(db.User, { foreignKey: 'userId' });
+// Appointments
+Patient.hasMany(Appointment, { foreignKey: 'patientId' });
+Appointment.belongsTo(Patient, { foreignKey: 'patientId' });
 
-db.User.hasOne(db.Caregiver, { foreignKey: 'userId' });
-db.Caregiver.belongsTo(db.User, { foreignKey: 'userId' });
+Caregiver.hasMany(Appointment, { foreignKey: 'caregiverId' });
+Appointment.belongsTo(Caregiver, { foreignKey: 'caregiverId' });
 
-db.User.hasOne(db.PrimaryPhysician, { foreignKey: 'userId' });
-db.PrimaryPhysician.belongsTo(db.User, { foreignKey: 'userId' });
+// Teleconference sessions
+Appointment.hasOne(TeleconferenceSession, { foreignKey: 'appointmentId' });
+TeleconferenceSession.belongsTo(Appointment, { foreignKey: 'appointmentId' });
 
-db.Caregiver.belongsToMany(db.Specialty, { through: 'CaregiverSpecialties' });
-db.Specialty.belongsToMany(db.Caregiver, { through: 'CaregiverSpecialties' });
+// Care session reports
+Appointment.hasOne(CareSessionReport, { foreignKey: 'appointmentId' });
+CareSessionReport.belongsTo(Appointment, { foreignKey: 'appointmentId' });
 
-db.Appointment.belongsTo(db.Patient, { foreignKey: 'patientId' });
-db.Appointment.belongsTo(db.Caregiver, { foreignKey: 'caregiverId' });
+// Payment transactions
+Appointment.hasOne(PaymentTransaction, { foreignKey: 'appointmentId' });
+PaymentTransaction.belongsTo(Appointment, { foreignKey: 'appointmentId' });
 
-db.TeleconferenceSession.belongsTo(db.Appointment, { foreignKey: 'appointmentId' });
+// Caregiver recommendations
+PrimaryPhysician.hasMany(CaregiverRecommendation, { foreignKey: 'physicianId' });
+CaregiverRecommendation.belongsTo(PrimaryPhysician, { foreignKey: 'physicianId' });
 
-db.CareSessionReport.belongsTo(db.Appointment, { foreignKey: 'appointmentId' });
-db.CareSessionReport.belongsTo(db.Caregiver, { foreignKey: 'caregiverId' });
-db.CareSessionReport.belongsTo(db.Patient, { foreignKey: 'patientId' });
+Patient.hasMany(CaregiverRecommendation, { foreignKey: 'patientId' });
+CaregiverRecommendation.belongsTo(Patient, { foreignKey: 'patientId' });
 
-db.PaymentTransaction.belongsTo(db.Appointment, { foreignKey: 'appointmentId' });
-db.PaymentTransaction.belongsTo(db.Patient, { foreignKey: 'patientId' });
+Caregiver.hasMany(CaregiverRecommendation, { foreignKey: 'caregiverId' });
+CaregiverRecommendation.belongsTo(Caregiver, { foreignKey: 'caregiverId' });
 
-db.CaregiverRecommendation.belongsTo(db.PrimaryPhysician, { foreignKey: 'physicianId' });
-db.CaregiverRecommendation.belongsTo(db.Patient, { foreignKey: 'patientId' });
-db.CaregiverRecommendation.belongsTo(db.Caregiver, { foreignKey: 'caregiverId' });
-db.CaregiverRecommendation.belongsTo(db.Specialty, { foreignKey: 'specialtyId' });
+// Status alerts
+Patient.hasMany(StatusAlert, { foreignKey: 'patientId' });
+StatusAlert.belongsTo(Patient, { foreignKey: 'patientId' });
 
-db.StatusAlert.belongsTo(db.Patient, { foreignKey: 'patientId' });
-db.StatusAlert.belongsTo(db.CareSessionReport, { foreignKey: 'reportId' });
-
-module.exports = db;
+module.exports = {
+  sequelize,
+  User,
+  Patient,
+  Caregiver,
+  PrimaryPhysician,
+  Specialty,
+  Appointment,
+  TeleconferenceSession,
+  CareSessionReport,
+  PaymentTransaction,
+  CaregiverRecommendation,
+  StatusAlert
+};
