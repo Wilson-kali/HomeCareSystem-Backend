@@ -10,7 +10,7 @@ const Patient = sequelize.define('Patient', {
   userId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Users', key: 'id' }
+    references: { model: 'users', key: 'id' }
   },
   dateOfBirth: {
     type: DataTypes.DATE,
@@ -33,6 +33,8 @@ const Patient = sequelize.define('Patient', {
   allergies: {
     type: DataTypes.TEXT
   }
+}, {
+  tableName: 'patients'
 });
 
 module.exports = Patient;
