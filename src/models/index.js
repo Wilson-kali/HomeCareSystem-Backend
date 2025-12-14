@@ -1,5 +1,8 @@
 const sequelize = require('../config/database');
 const User = require('./User');
+const Role = require('./Role');
+const Permission = require('./Permission');
+const RolePermission = require('./RolePermission');
 const Patient = require('./Patient');
 const Caregiver = require('./Caregiver');
 const PrimaryPhysician = require('./PrimaryPhysician');
@@ -12,6 +15,14 @@ const CaregiverRecommendation = require('./CaregiverRecommendation');
 const StatusAlert = require('./StatusAlert');
 
 // Define associations
+// User-Role association
+Role.hasMany(User, { foreignKey: 'role_id' });
+User.belongsTo(Role, { foreignKey: 'role_id' });
+
+// Role-Permission many-to-many
+Role.belongsToMany(Permission, { through: RolePermission, foreignKey: 'role_id' });
+Permission.belongsToMany(Role, { through: RolePermission, foreignKey: 'permission_id' });
+
 User.hasOne(Patient, { foreignKey: 'userId' });
 Patient.belongsTo(User, { foreignKey: 'userId' });
 
@@ -61,6 +72,9 @@ StatusAlert.belongsTo(Patient, { foreignKey: 'patientId' });
 module.exports = {
   sequelize,
   User,
+  Role,
+  Permission,
+  RolePermission,
   Patient,
   Caregiver,
   PrimaryPhysician,

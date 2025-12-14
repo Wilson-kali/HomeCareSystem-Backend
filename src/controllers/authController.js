@@ -1,6 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { User, Patient, Caregiver, PrimaryPhysician } = require('../models');
+const { User, Patient, Caregiver, PrimaryPhysician, Role } = require('../models');
 const { jwtSecret, jwtExpiresIn, bcryptRounds } = require('../config/auth');
 const { USER_ROLES } = require('../utils/constants');
 const { sanitizeUser } = require('../utils/helpers');
@@ -11,7 +11,13 @@ const generateToken = (userId) => {
 
 const register = async (req, res, next) => {
   try {
-    const { email, password, firstName, lastName, phone, role, ...roleSpecificData } = req.body;
+    const { email, password, firstName, lastName, phone, ...roleSpecificData } = req.body;
+
+    // Only allow patient registration through public endpoint
+    const patientRole = await Role.findOne({ where: { name: 'patient' } });
+    if (!patientRole) {
+      return res.status(500).json({ error: 'Patient role not found' });
+    }
 
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
@@ -26,30 +32,14 @@ const register = async (req, res, next) => {
       firstName,
       lastName,
       phone,
-      role
+      role_id: patientRole.id
     });
 
-    // Create role-specific profile
-    switch (role) {
-      case USER_ROLES.PATIENT:
-        await Patient.create({
-          userId: user.id,
-          ...roleSpecificData
-        });
-        break;
-      case USER_ROLES.CAREGIVER:
-        await Caregiver.create({
-          userId: user.id,
-          ...roleSpecificData
-        });
-        break;
-      case USER_ROLES.PRIMARY_PHYSICIAN:
-        await PrimaryPhysician.create({
-          userId: user.id,
-          ...roleSpecificData
-        });
-        break;
-    }
+    // Create patient profile
+    await Patient.create({
+      userId: user.id,
+      ...roleSpecificData
+    });
 
     const token = generateToken(user.id);
     
@@ -63,11 +53,68 @@ const register = async (req, res, next) => {
   }
 };
 
+const registerAdmin = async (req, res, next) => {
+  try {
+    const { email, password, firstName, lastName, phone, roleName, ...roleSpecificData } = req.body;
+
+    // Find the role
+    const role = await Role.findOne({ where: { name: roleName } });
+    if (!role) {
+      return res.status(400).json({ error: 'Invalid role specified' });
+    }
+
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(409).json({ error: 'Email already registered' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, bcryptRounds);
+    
+    const user = await User.create({
+      email,
+      password: hashedPassword,
+      firstName,
+      lastName,
+      phone,
+      role_id: role.id
+    });
+
+    // Create role-specific profile
+    switch (roleName) {
+      case 'caregiver':
+        await Caregiver.create({
+          userId: user.id,
+          ...roleSpecificData
+        });
+        break;
+      case 'primary_physician':
+        await PrimaryPhysician.create({
+          userId: user.id,
+          ...roleSpecificData
+        });
+        break;
+    }
+
+    const token = generateToken(user.id);
+    
+    res.status(201).json({
+      message: 'Admin registration successful',
+      token,
+      user: sanitizeUser(user)
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
 
-    const user = await User.findOne({ where: { email } });
+    const user = await User.findOne({ 
+      where: { email },
+      include: [{ model: Role }]
+    });
     if (!user || !user.isActive) {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
@@ -107,6 +154,7 @@ const getProfile = async (req, res, next) => {
 
 module.exports = {
   register,
+  registerAdmin,
   login,
   getProfile
 };

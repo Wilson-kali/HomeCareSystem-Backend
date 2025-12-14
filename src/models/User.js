@@ -30,10 +30,10 @@ const User = sequelize.define('User', {
     type: DataTypes.STRING,
     allowNull: false
   },
-  role: {
-    type: DataTypes.ENUM,
-    values: Object.values(USER_ROLES),
-    allowNull: false
+  role_id: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: { model: 'roles', key: 'id' }
   },
   isActive: {
     type: DataTypes.BOOLEAN,
