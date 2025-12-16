@@ -6,7 +6,10 @@
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
     "db:migrate": "node src/scripts/migrate.js",
-    "db:seed": "node src/scripts/seed.js"
+    "db:seed": "node src/scripts/seed.js",
+    "db:init": "node src/scripts/initDb.js",
+    "db:migrate-booking": "node src/scripts/runMigration.js",
+    "db:migrate-safe": "node -e \"require('./src/scripts/safeMigration')().then(() => process.exit(0)).catch(e => {console.error(e); process.exit(1)})\""
   },
   "keywords": [],
   "author": "",
@@ -15,6 +18,7 @@
   "dependencies": {
     "axios": "^1.13.2",
     "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.8.0",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
@@ -24,7 +28,7 @@
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
     "mysql2": "^3.15.3",
-    "nodemailer": "^7.0.11",
+    "resend": "^3.2.0",
     "sequelize": "^6.37.7",
     "socket.io": "^4.8.1",
     "stripe": "^20.0.0",

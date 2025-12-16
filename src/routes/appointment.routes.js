@@ -4,7 +4,8 @@ const {
   createAppointment, 
   getAppointments, 
   updateAppointmentStatus,
-  getAppointmentById 
+  getAppointmentById,
+  confirmPayment
 } = require('../controllers/appointmentController');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const { handleValidationErrors } = require('../middleware/validator.middleware');
@@ -12,10 +13,8 @@ const { handleValidationErrors } = require('../middleware/validator.middleware')
 const router = express.Router();
 
 const createAppointmentValidation = [
-  body('caregiverId').isInt(),
+  body('timeSlotId').isInt(),
   body('specialtyId').isInt(),
-  body('scheduledDate').isISO8601(),
-  body('duration').isInt({ min: 30 }),
   body('sessionType').isIn(['in_person', 'teleconference'])
 ];
 
@@ -23,7 +22,35 @@ router.use(authenticateToken);
 
 router.post('/', createAppointmentValidation, handleValidationErrors, createAppointment);
 router.get('/', getAppointments);
+router.get('/caregiver', async (req, res, next) => {
+  try {
+    const { Appointment, Patient, User, Specialty, Caregiver } = require('../models');
+    
+    // Find caregiver by user ID
+    const caregiver = await Caregiver.findOne({ where: { userId: req.user.id } });
+    if (!caregiver) {
+      return res.status(404).json({ error: 'Caregiver profile not found' });
+    }
+
+    const appointments = await Appointment.findAll({
+      where: { caregiverId: caregiver.id },
+      include: [
+        {
+          model: Patient,
+          include: [{ model: User, attributes: ['firstName', 'lastName', 'email', 'phone'] }]
+        },
+        { model: Specialty, attributes: ['name'] }
+      ],
+      order: [['scheduledDate', 'DESC']]
+    });
+
+    res.json({ appointments });
+  } catch (error) {
+    next(error);
+  }
+});
 router.get('/:id', getAppointmentById);
 router.patch('/:id/status', updateAppointmentStatus);
+router.post('/confirm-payment', confirmPayment);
 
 module.exports = router;

@@ -46,5 +46,11 @@ module.exports = {
   SESSION_TYPE: {
     IN_PERSON: 'in_person',
     TELECONFERENCE: 'teleconference'
+  },
+  
+  TIMESLOT_STATUS: {
+    AVAILABLE: 'available',
+    LOCKED: 'locked',
+    BOOKED: 'booked'
   }
 };

@@ -1,10 +1,10 @@
-const { Appointment, Patient, Caregiver, User, Specialty } = require('../models');
-const { APPOINTMENT_STATUS, USER_ROLES } = require('../utils/constants');
+const { Appointment, Patient, Caregiver, User, Specialty, TimeSlot } = require('../models');
+const { APPOINTMENT_STATUS, USER_ROLES, TIMESLOT_STATUS, PAYMENT_STATUS } = require('../utils/constants');
 const { sendAppointmentConfirmation } = require('../services/emailService');
 
 const createAppointment = async (req, res, next) => {
   try {
-    const { caregiverId, specialtyId, scheduledDate, duration, sessionType, notes } = req.body;
+    const { timeSlotId, specialtyId, sessionType, notes } = req.body;
     
     // Get patient ID from authenticated user
     const patient = await Patient.findOne({ where: { userId: req.user.id } });
@@ -12,36 +12,41 @@ const createAppointment = async (req, res, next) => {
       return res.status(403).json({ error: 'Only patients can create appointments' });
     }
 
-    // Calculate total cost (simplified - in production, get from caregiver's hourly rate)
-    const caregiver = await Caregiver.findByPk(caregiverId);
-    const totalCost = (caregiver.hourlyRate * duration) / 60;
+    // Verify time slot is locked and available
+    const timeSlot = await TimeSlot.findByPk(timeSlotId);
+    if (!timeSlot || timeSlot.status !== TIMESLOT_STATUS.LOCKED) {
+      return res.status(400).json({ error: 'Time slot not available or not locked' });
+    }
+
+    // Check if slot lock is still valid
+    if (timeSlot.lockedUntil && new Date() > timeSlot.lockedUntil) {
+      await timeSlot.update({ status: TIMESLOT_STATUS.AVAILABLE, lockedUntil: null });
+      return res.status(400).json({ error: 'Time slot lock expired' });
+    }
 
     const appointment = await Appointment.create({
       patientId: patient.id,
-      caregiverId,
+      caregiverId: timeSlot.caregiverId,
       specialtyId,
-      scheduledDate,
-      duration,
+      scheduledDate: new Date(`${timeSlot.date} ${timeSlot.startTime}`),
+      duration: timeSlot.duration,
       sessionType,
       notes,
-      totalCost
+      totalCost: timeSlot.price,
+      timeSlotId,
+      paymentStatus: PAYMENT_STATUS.PENDING,
+      bookedAt: new Date()
     });
 
-    // Send confirmation email
-    const appointmentDetails = await Appointment.findByPk(appointment.id, {
-      include: [
-        { model: Caregiver, include: [{ model: User }] },
-        { model: Specialty }
-      ]
+    // Mark time slot as booked
+    await timeSlot.update({
+      status: TIMESLOT_STATUS.BOOKED,
+      isBooked: true,
+      appointmentId: appointment.id,
+      lockedUntil: null
     });
 
-    await sendAppointmentConfirmation(req.user.email, {
-      scheduledDate,
-      caregiverName: `${appointmentDetails.Caregiver.User.firstName} ${appointmentDetails.Caregiver.User.lastName}`,
-      sessionType
-    });
-
-    res.status(201).json({ appointment });
+    res.status(201).json({ appointment, timeSlot });
   } catch (error) {
     next(error);
   }
@@ -57,6 +62,7 @@ const getAppointments = async (req, res, next) => {
     if (req.user.role === USER_ROLES.PATIENT) {
       const patient = await Patient.findOne({ where: { userId: req.user.id } });
       whereClause.patientId = patient.id;
+      whereClause.paymentStatus = PAYMENT_STATUS.COMPLETED; // Only paid appointments
     } else if (req.user.role === USER_ROLES.CAREGIVER) {
       const caregiver = await Caregiver.findOne({ where: { userId: req.user.id } });
       whereClause.caregiverId = caregiver.id;
@@ -71,7 +77,8 @@ const getAppointments = async (req, res, next) => {
       include: [
         { model: Patient, include: [{ model: User }] },
         { model: Caregiver, include: [{ model: User }] },
-        { model: Specialty }
+        { model: Specialty },
+        { model: TimeSlot }
       ],
       limit: parseInt(limit),
       offset: parseInt(offset),
@@ -95,7 +102,8 @@ const getAppointmentById = async (req, res, next) => {
       include: [
         { model: Patient, include: [{ model: User }] },
         { model: Caregiver, include: [{ model: User }] },
-        { model: Specialty }
+        { model: Specialty },
+        { model: TimeSlot }
       ]
     });
 
@@ -112,13 +120,52 @@ const getAppointmentById = async (req, res, next) => {
 const updateAppointmentStatus = async (req, res, next) => {
   try {
     const { status } = req.body;
-    const appointment = await Appointment.findByPk(req.params.id);
+    const appointment = await Appointment.findByPk(req.params.id, {
+      include: [{ model: TimeSlot }]
+    });
 
     if (!appointment) {
       return res.status(404).json({ error: 'Appointment not found' });
     }
 
     appointment.status = status;
+    await appointment.save();
+
+    // If cancelled, free up the time slot
+    if (status === APPOINTMENT_STATUS.CANCELLED && appointment.TimeSlot) {
+      await appointment.TimeSlot.update({
+        status: TIMESLOT_STATUS.AVAILABLE,
+        isBooked: false,
+        appointmentId: null
+      });
+    }
+
+    res.json({ appointment });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const confirmPayment = async (req, res, next) => {
+  try {
+    const { appointmentId } = req.body;
+    
+    const appointment = await Appointment.findByPk(appointmentId, {
+      include: [{ model: Caregiver }, { model: TimeSlot }]
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Update payment status
+    appointment.paymentStatus = PAYMENT_STATUS.COMPLETED;
+    
+    // Auto-confirm if caregiver has auto-confirm enabled
+    if (appointment.Caregiver.autoConfirm) {
+      appointment.status = APPOINTMENT_STATUS.CONFIRMED;
+    }
+    
     await appointment.save();
 
     res.json({ appointment });
@@ -131,5 +178,6 @@ module.exports = {
   createAppointment,
   getAppointments,
   getAppointmentById,
-  updateAppointmentStatus
+  updateAppointmentStatus,
+  confirmPayment
 };

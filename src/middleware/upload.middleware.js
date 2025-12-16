@@ -31,4 +31,6 @@ const upload = multer({
   fileFilter
 });
 
-module.exports = { upload };
+const uploadMultiple = upload.array('supportingDocuments', 5); // Max 5 files
+
+module.exports = { upload, uploadMultiple };
