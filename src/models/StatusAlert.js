@@ -11,12 +11,12 @@ const StatusAlert = sequelize.define('StatusAlert', {
   patientId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Patients', key: 'id' }
+    references: { model: 'patients', key: 'id' }
   },
   reportId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'CareSessionReports', key: 'id' }
+    references: { model: 'caresessionreports', key: 'id' }
   },
   severity: {
     type: DataTypes.ENUM,
@@ -34,6 +34,8 @@ const StatusAlert = sequelize.define('StatusAlert', {
   readAt: {
     type: DataTypes.DATE
   }
+}, {
+  tableName: 'statusalerts'
 });
 
 module.exports = StatusAlert;
