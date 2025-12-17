@@ -19,6 +19,8 @@ const Specialty = sequelize.define('Specialty', {
     type: DataTypes.BOOLEAN,
     defaultValue: true
   }
+}, {
+  tableName: 'specialties'
 });
 
 module.exports = Specialty;

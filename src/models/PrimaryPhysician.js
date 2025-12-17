@@ -11,7 +11,7 @@ const PrimaryPhysician = sequelize.define('PrimaryPhysician', {
   userId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Users', key: 'id' }
+    references: { model: 'users', key: 'id' }
   },
   medicalLicenseNumber: {
     type: DataTypes.STRING,
@@ -30,6 +30,8 @@ const PrimaryPhysician = sequelize.define('PrimaryPhysician', {
     values: Object.values(VERIFICATION_STATUS),
     defaultValue: VERIFICATION_STATUS.PENDING
   }
+}, {
+  tableName: 'primaryphysicians'
 });
 
 module.exports = PrimaryPhysician;

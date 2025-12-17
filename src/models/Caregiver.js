@@ -11,7 +11,7 @@ const Caregiver = sequelize.define('Caregiver', {
   userId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Users', key: 'id' }
+    references: { model: 'users', key: 'id' }
   },
   licenseNumber: {
     type: DataTypes.STRING,
@@ -58,6 +58,8 @@ const Caregiver = sequelize.define('Caregiver', {
     defaultValue: true,
     comment: 'Auto-confirm appointments after payment'
   }
+}, {
+  tableName: 'caregivers'
 });
 
 module.exports = Caregiver;
