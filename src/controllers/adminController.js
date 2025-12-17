@@ -1,60 +1,108 @@
-const { Caregiver, User, Appointment, Patient } = require('../models');
-const { VERIFICATION_STATUS, APPOINTMENT_STATUS } = require('../utils/constants');
+const { User, Caregiver, Role } = require('../models');
+const { sanitizeUser } = require('../utils/helpers');
 
-const verifyCaregiver = async (req, res, next) => {
+const getPendingCaregivers = async (req, res, next) => {
   try {
-    const { id } = req.params;
-    const { status, notes } = req.body;
+    const caregiverRole = await Role.findOne({ where: { name: 'caregiver' } });
     
-    const caregiver = await Caregiver.findByPk(id);
-    if (!caregiver) {
-      return res.status(404).json({ error: 'Caregiver not found' });
+    const pendingCaregivers = await User.findAll({
+      where: { 
+        role_id: caregiverRole.id,
+        isActive: false 
+      },
+      include: [
+        { model: Caregiver },
+        { model: Role }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+
+    res.json({ caregivers: pendingCaregivers.map(sanitizeUser) });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const approveCaregiver = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    
+    const user = await User.findByPk(userId, {
+      include: [{ model: Caregiver }]
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
     }
 
-    caregiver.verificationStatus = status;
-    await caregiver.save();
-
+    // Update both user status and caregiver verification
+    await user.update({ isActive: true });
+    
+    if (user.Caregiver) {
+      await user.Caregiver.update({ verificationStatus: 'verified' });
+    }
+    
+    // Send approval email to caregiver
+    try {
+      const emailService = require('../services/emailService');
+      await emailService.sendCaregiverApprovalNotification(user.email, user.firstName);
+    } catch (emailError) {
+      console.error('Failed to send approval email:', emailError);
+    }
+    
     res.json({ 
-      message: `Caregiver ${status} successfully`,
-      caregiver 
+      message: 'Caregiver verified successfully',
+      user: sanitizeUser(user)
     });
   } catch (error) {
     next(error);
   }
 };
 
-const getDashboardStats = async (req, res, next) => {
+const rejectCaregiver = async (req, res, next) => {
   try {
-    const totalCaregivers = await Caregiver.count();
-    const verifiedCaregivers = await Caregiver.count({
-      where: { verificationStatus: VERIFICATION_STATUS.VERIFIED }
-    });
-    const pendingVerifications = await Caregiver.count({
-      where: { verificationStatus: VERIFICATION_STATUS.PENDING }
-    });
+    const { userId } = req.params;
+    const { reason } = req.body;
     
-    const totalPatients = await Patient.count();
-    const totalAppointments = await Appointment.count();
-    const completedAppointments = await Appointment.count({
-      where: { status: APPOINTMENT_STATUS.COMPLETED }
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    await user.destroy();
+    
+    // TODO: Send rejection email with reason
+    
+    res.json({ message: 'Caregiver application rejected' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getAllUsers = async (req, res, next) => {
+  try {
+    const { Specialty } = require('../models');
+    const users = await User.findAll({
+      include: [
+        { model: Role },
+        { 
+          model: Caregiver, 
+          required: false,
+          include: [{ model: Specialty, through: { attributes: [] } }]
+        },
+      ],
+      order: [['createdAt', 'DESC']]
     });
 
-    res.json({
-      stats: {
-        totalCaregivers,
-        verifiedCaregivers,
-        pendingVerifications,
-        totalPatients,
-        totalAppointments,
-        completedAppointments
-      }
-    });
+    res.json({ users: users.map(sanitizeUser) });
   } catch (error) {
     next(error);
   }
 };
 
 module.exports = {
-  verifyCaregiver,
-  getDashboardStats
+  getPendingCaregivers,
+  approveCaregiver,
+  rejectCaregiver,
+  getAllUsers
 };

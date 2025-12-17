@@ -1,6 +1,6 @@
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
-const { APPOINTMENT_STATUS, SESSION_TYPE } = require('../utils/constants');
+const { APPOINTMENT_STATUS, SESSION_TYPE, PAYMENT_STATUS } = require('../utils/constants');
 
 const Appointment = sequelize.define('Appointment', {
   id: {
@@ -46,6 +46,23 @@ const Appointment = sequelize.define('Appointment', {
   },
   totalCost: {
     type: DataTypes.DECIMAL(10, 2)
+  },
+  timeSlotId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'time_slots',
+      key: 'id'
+    }
+  },
+  paymentStatus: {
+    type: DataTypes.ENUM,
+    values: Object.values(PAYMENT_STATUS),
+    defaultValue: PAYMENT_STATUS.PENDING
+  },
+  bookedAt: {
+    type: DataTypes.DATE,
+    allowNull: true
   }
 });
 

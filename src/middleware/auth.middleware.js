@@ -12,13 +12,19 @@ const authenticateToken = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, jwtSecret);
-    const user = await User.findByPk(decoded.userId);
+    const user = await User.findByPk(decoded.userId, {
+      include: [{ model: require('../models').Role }]
+    });
     
     if (!user || !user.isActive) {
       return res.status(401).json({ error: 'Invalid or inactive user' });
     }
 
-    req.user = user;
+    // Add role name to user object for easier access
+    req.user = {
+      ...user.toJSON(),
+      role: user.Role?.name
+    };
     next();
   } catch (error) {
     return res.status(403).json({ error: 'Invalid token' });

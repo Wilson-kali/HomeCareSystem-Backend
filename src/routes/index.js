@@ -7,6 +7,13 @@ const reportRoutes = require('./report.routes');
 const teleconferenceRoutes = require('./teleconference.routes');
 const specialtyRoutes = require('./specialty.routes');
 const adminRoutes = require('./admin.routes');
+const paymentRoutes = require('./payment.routes');
+const patientRoutes = require('./patient.routes');
+const earningsRoutes = require('./earnings.routes');
+const publicRoutes = require('./public.routes');
+const termsRoutes = require('./terms.routes');
+const timeSlotRoutes = require('./timeSlot.routes');
+const availabilityRoutes = require('./availability.routes');
 
 const router = express.Router();
 
@@ -18,5 +25,12 @@ router.use('/reports', reportRoutes);
 router.use('/teleconference', teleconferenceRoutes);
 router.use('/specialties', specialtyRoutes);
 router.use('/admin', adminRoutes);
+router.use('/payments', paymentRoutes);
+router.use('/patients', patientRoutes);
+router.use('/earnings', earningsRoutes);
+router.use('/public', publicRoutes);
+router.use('/', termsRoutes);
+router.use('/timeslots', timeSlotRoutes);
+router.use('/availability', availabilityRoutes);
 
 module.exports = router;

@@ -1,10 +1,11 @@
-const { User, Patient, Caregiver, PrimaryPhysician } = require('../models');
+const { User, Patient, Caregiver, PrimaryPhysician, Role, UserSettings } = require('../models');
 const { sanitizeUser } = require('../utils/helpers');
 
 const getProfile = async (req, res, next) => {
   try {
     const user = await User.findByPk(req.user.id, {
       include: [
+        { model: Role, attributes: ['name'] },
         { model: Patient, required: false },
         { model: Caregiver, required: false },
         { model: PrimaryPhysician, required: false }
@@ -17,29 +18,77 @@ const getProfile = async (req, res, next) => {
   }
 };
 
-const updateProfile = async (req, res, next) => {
+const changePassword = async (req, res, next) => {
   try {
-    const { firstName, lastName, phone, ...roleSpecificData } = req.body;
+    const { currentPassword, newPassword } = req.body;
     
     const user = await User.findByPk(req.user.id);
     
+    // Verify current password
+    const bcrypt = require('bcryptjs');
+    const isValidPassword = await bcrypt.compare(currentPassword, user.password);
+    if (!isValidPassword) {
+      return res.status(400).json({ error: 'Current password is incorrect' });
+    }
+    
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    // Update password
+    await user.update({ password: hashedPassword });
+    
+    res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateProfile = async (req, res, next) => {
+  try {
+    const { 
+      firstName, 
+      lastName, 
+      phone, 
+      dateOfBirth,
+      address,
+      emergencyContact,
+      medicalHistory,
+      allergies,
+      ...otherData 
+    } = req.body;
+    
+    const user = await User.findByPk(req.user.id, {
+      include: [
+        { model: Role, attributes: ['name'] },
+        { model: Patient, required: false },
+        { model: Caregiver, required: false },
+        { model: PrimaryPhysician, required: false }
+      ]
+    });
+    
+    // Update user basic info
     await user.update({
       firstName,
       lastName,
       phone
     });
 
-    // Update role-specific data
-    if (user.role === 'patient' && user.Patient) {
-      await user.Patient.update(roleSpecificData);
-    } else if (user.role === 'caregiver' && user.Caregiver) {
-      await user.Caregiver.update(roleSpecificData);
-    } else if (user.role === 'primary_physician' && user.PrimaryPhysician) {
-      await user.PrimaryPhysician.update(roleSpecificData);
+    // Update patient-specific data
+    if (user.Role.name === 'patient' && user.Patient) {
+      const patientData = {};
+      if (dateOfBirth) patientData.dateOfBirth = dateOfBirth;
+      if (address) patientData.address = address;
+      if (emergencyContact) patientData.emergencyContact = emergencyContact;
+      if (medicalHistory !== undefined) patientData.medicalHistory = medicalHistory;
+      if (allergies !== undefined) patientData.allergies = allergies;
+      
+      await user.Patient.update(patientData);
     }
 
+    // Fetch updated user with all associations
     const updatedUser = await User.findByPk(req.user.id, {
       include: [
+        { model: Role, attributes: ['name'] },
         { model: Patient, required: false },
         { model: Caregiver, required: false },
         { model: PrimaryPhysician, required: false }
@@ -52,7 +101,51 @@ const updateProfile = async (req, res, next) => {
   }
 };
 
+const getSettings = async (req, res, next) => {
+  try {
+    let settings = await UserSettings.findOne({ where: { userId: req.user.id } });
+    
+    if (!settings) {
+      settings = await UserSettings.create({ userId: req.user.id });
+    }
+    
+    res.json({ settings });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const updateSettings = async (req, res, next) => {
+  try {
+    const { notifications, privacy, preferences } = req.body;
+    
+    let settings = await UserSettings.findOne({ where: { userId: req.user.id } });
+    
+    if (!settings) {
+      settings = await UserSettings.create({ 
+        userId: req.user.id,
+        notifications,
+        privacy,
+        preferences
+      });
+    } else {
+      await settings.update({
+        notifications,
+        privacy,
+        preferences
+      });
+    }
+    
+    res.json({ settings, message: 'Settings updated successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getProfile,
-  updateProfile
+  updateProfile,
+  changePassword,
+  getSettings,
+  updateSettings
 };

@@ -13,6 +13,9 @@ const CareSessionReport = require('./CareSessionReport');
 const PaymentTransaction = require('./PaymentTransaction');
 const CaregiverRecommendation = require('./CaregiverRecommendation');
 const StatusAlert = require('./StatusAlert');
+const UserSettings = require('./UserSettings');
+const TimeSlot = require('./TimeSlot');
+const CaregiverAvailability = require('./CaregiverAvailability');
 
 // Define associations
 // User-Role association
@@ -43,6 +46,10 @@ Appointment.belongsTo(Patient, { foreignKey: 'patientId' });
 Caregiver.hasMany(Appointment, { foreignKey: 'caregiverId' });
 Appointment.belongsTo(Caregiver, { foreignKey: 'caregiverId' });
 
+// Specialty-Appointment association
+Specialty.hasMany(Appointment, { foreignKey: 'specialtyId' });
+Appointment.belongsTo(Specialty, { foreignKey: 'specialtyId' });
+
 // Teleconference sessions
 Appointment.hasOne(TeleconferenceSession, { foreignKey: 'appointmentId' });
 TeleconferenceSession.belongsTo(Appointment, { foreignKey: 'appointmentId' });
@@ -69,6 +76,21 @@ CaregiverRecommendation.belongsTo(Caregiver, { foreignKey: 'caregiverId' });
 Patient.hasMany(StatusAlert, { foreignKey: 'patientId' });
 StatusAlert.belongsTo(Patient, { foreignKey: 'patientId' });
 
+// User settings
+User.hasOne(UserSettings, { foreignKey: 'userId' });
+UserSettings.belongsTo(User, { foreignKey: 'userId' });
+
+// TimeSlot associations
+Caregiver.hasMany(TimeSlot, { foreignKey: 'caregiverId' });
+TimeSlot.belongsTo(Caregiver, { foreignKey: 'caregiverId' });
+
+Appointment.belongsTo(TimeSlot, { foreignKey: 'timeSlotId' });
+TimeSlot.hasOne(Appointment, { foreignKey: 'timeSlotId' });
+
+// CaregiverAvailability associations
+Caregiver.hasMany(CaregiverAvailability, { foreignKey: 'caregiverId' });
+CaregiverAvailability.belongsTo(Caregiver, { foreignKey: 'caregiverId' });
+
 module.exports = {
   sequelize,
   User,
@@ -84,5 +106,8 @@ module.exports = {
   CareSessionReport,
   PaymentTransaction,
   CaregiverRecommendation,
-  StatusAlert
+  StatusAlert,
+  UserSettings,
+  TimeSlot,
+  CaregiverAvailability
 };

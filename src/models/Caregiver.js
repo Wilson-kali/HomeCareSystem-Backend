@@ -43,6 +43,20 @@ const Caregiver = sequelize.define('Caregiver', {
   },
   profileImage: {
     type: DataTypes.STRING
+  },
+  supportingDocuments: {
+    type: DataTypes.JSON,
+    defaultValue: []
+  },
+  appointmentDuration: {
+    type: DataTypes.INTEGER,
+    defaultValue: 60,
+    comment: 'Default appointment duration in minutes'
+  },
+  autoConfirm: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true,
+    comment: 'Auto-confirm appointments after payment'
   }
 });
 

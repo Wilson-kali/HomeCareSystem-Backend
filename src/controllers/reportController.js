@@ -1,4 +1,4 @@
-const { CareSessionReport, Appointment, Patient, User } = require('../models');
+const { CareSessionReport, Appointment, Patient, Caregiver, User } = require('../models');
 const { createStatusAlert } = require('../services/notificationService');
 const { PATIENT_STATUS, APPOINTMENT_STATUS } = require('../utils/constants');
 
@@ -96,7 +96,32 @@ const getReports = async (req, res, next) => {
   }
 };
 
+const getReportById = async (req, res, next) => {
+  try {
+    const report = await CareSessionReport.findByPk(req.params.id, {
+      include: [
+        {
+          model: Appointment,
+          include: [
+            { model: Patient, include: [{ model: User }] },
+            { model: Caregiver, include: [{ model: User }] }
+          ]
+        }
+      ]
+    });
+
+    if (!report) {
+      return res.status(404).json({ error: 'Report not found' });
+    }
+
+    res.json({ report });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createReport,
-  getReports
+  getReports,
+  getReportById
 };
