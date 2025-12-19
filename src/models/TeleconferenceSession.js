@@ -10,7 +10,7 @@ const TeleconferenceSession = sequelize.define('TeleconferenceSession', {
   appointmentId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Appointments', key: 'id' }
+    references: { model: 'appointments', key: 'id' }
   },
   roomId: {
     type: DataTypes.STRING,
@@ -32,6 +32,8 @@ const TeleconferenceSession = sequelize.define('TeleconferenceSession', {
   chatHistory: {
     type: DataTypes.JSON
   }
+}, {
+  tableName: 'teleconferencesessions'
 });
 
 module.exports = TeleconferenceSession;

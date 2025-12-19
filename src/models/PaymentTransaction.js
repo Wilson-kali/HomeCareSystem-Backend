@@ -11,7 +11,7 @@ const PaymentTransaction = sequelize.define('PaymentTransaction', {
   appointmentId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Appointments', key: 'id' }
+    references: { model: 'appointments', key: 'id' }
   },
   amount: {
     type: DataTypes.DECIMAL(10, 2),
@@ -46,6 +46,8 @@ const PaymentTransaction = sequelize.define('PaymentTransaction', {
   refundedAt: {
     type: DataTypes.DATE
   }
+}, {
+  tableName: 'paymenttransactions'
 });
 
 module.exports = PaymentTransaction;

@@ -11,7 +11,7 @@ const CareSessionReport = sequelize.define('CareSessionReport', {
   appointmentId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Appointments', key: 'id' }
+    references: { model: 'appointments', key: 'id' }
   },
   observations: {
     type: DataTypes.TEXT,
@@ -75,6 +75,8 @@ const CareSessionReport = sequelize.define('CareSessionReport', {
     allowNull: true,
     comment: 'Additional notes from caregiver'
   }
+}, {
+  tableName: 'caresessionreports'
 });
 
 module.exports = CareSessionReport;

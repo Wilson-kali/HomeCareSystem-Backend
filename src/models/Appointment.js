@@ -11,17 +11,17 @@ const Appointment = sequelize.define('Appointment', {
   patientId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Patients', key: 'id' }
+    references: { model: 'patients', key: 'id' }
   },
   caregiverId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Caregivers', key: 'id' }
+    references: { model: 'caregivers', key: 'id' }
   },
   specialtyId: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    references: { model: 'Specialties', key: 'id' }
+    references: { model: 'specialties', key: 'id' }
   },
   scheduledDate: {
     type: DataTypes.DATE,
@@ -111,6 +111,8 @@ const Appointment = sequelize.define('Appointment', {
     },
     comment: 'Patient rating for this session (1-5 stars)'
   }
+}, {
+  tableName: 'appointments'
 });
 
 module.exports = Appointment;
