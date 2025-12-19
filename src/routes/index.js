@@ -14,6 +14,8 @@ const publicRoutes = require('./public.routes');
 const termsRoutes = require('./terms.routes');
 const timeSlotRoutes = require('./timeSlot.routes');
 const availabilityRoutes = require('./availability.routes');
+const locationRoutes = require('./location.routes');
+const careReportRoutes = require('./careReport.routes');
 
 const router = express.Router();
 
@@ -32,5 +34,7 @@ router.use('/public', publicRoutes);
 router.use('/', termsRoutes);
 router.use('/timeslots', timeSlotRoutes);
 router.use('/availability', availabilityRoutes);
+router.use('/locations', locationRoutes);
+router.use('/care-reports', careReportRoutes);
 
 module.exports = router;

@@ -2,6 +2,7 @@ const express = require('express');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const {
   initiateAppointmentPayment,
+  initiateBookingPaymentEndpoint,
   verifyPaymentStatus,
   handlePaymentWebhook,
   getPaymentsForAppointment,
@@ -16,7 +17,10 @@ router.post('/webhook', handlePaymentWebhook);
 // Authenticated routes
 router.use(authenticateToken);
 
-// Initiate payment for appointment
+// Initiate booking payment (creates appointment after payment)
+router.post('/initiate-booking', initiateBookingPaymentEndpoint);
+
+// Initiate payment for appointment (legacy)
 router.post('/initiate', initiateAppointmentPayment);
 
 // Verify payment status

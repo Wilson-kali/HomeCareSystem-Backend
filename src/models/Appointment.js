@@ -44,6 +44,16 @@ const Appointment = sequelize.define('Appointment', {
   notes: {
     type: DataTypes.TEXT
   },
+  bookingFee: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
+    comment: 'Booking fee amount for this appointment'
+  },
+  sessionFee: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
+    comment: 'Session fee amount for this appointment'
+  },
   totalCost: {
     type: DataTypes.DECIMAL(10, 2)
   },
@@ -55,14 +65,51 @@ const Appointment = sequelize.define('Appointment', {
       key: 'id'
     }
   },
+  bookingFeeStatus: {
+    type: DataTypes.ENUM,
+    values: Object.values(PAYMENT_STATUS),
+    defaultValue: PAYMENT_STATUS.PENDING,
+    field: 'booking_fee_status',
+    comment: 'Payment status for booking fee'
+  },
+  sessionFeeStatus: {
+    type: DataTypes.ENUM,
+    values: Object.values(PAYMENT_STATUS),
+    defaultValue: PAYMENT_STATUS.PENDING,
+    field: 'session_fee_status',
+    comment: 'Payment status for session fee'
+  },
   paymentStatus: {
     type: DataTypes.ENUM,
     values: Object.values(PAYMENT_STATUS),
-    defaultValue: PAYMENT_STATUS.PENDING
+    defaultValue: PAYMENT_STATUS.PENDING,
+    comment: 'Overall payment status (deprecated - use bookingFeeStatus and sessionFeeStatus)'
   },
   bookedAt: {
     type: DataTypes.DATE,
     allowNull: true
+  },
+  sessionPaidAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    field: 'session_paid_at',
+    comment: 'Timestamp when session fee was paid'
+  },
+  patientFeedback: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    field: 'patient_feedback',
+    comment: 'Patient feedback/comment for this session (admin-only visibility)'
+  },
+  patientRating: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    field: 'patient_rating',
+    validate: {
+      min: 1,
+      max: 5
+    },
+    comment: 'Patient rating for this session (1-5 stars)'
   }
 });
 

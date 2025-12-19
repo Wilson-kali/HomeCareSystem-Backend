@@ -57,26 +57,40 @@ const generateTimeSlots = async (req, res, next) => {
 
 const getAvailableSlots = async (req, res, next) => {
   try {
-    const { caregiverId, date } = req.query;
-    
+    const { caregiverId, date, includeLocked } = req.query;
+
     const whereClause = {
       status: TIMESLOT_STATUS.AVAILABLE,
-      [Op.or]: [
-        { lockedUntil: null },
-        { lockedUntil: { [Op.lt]: new Date() } }
-      ]
+      // Only show slots from today onwards if no specific date is provided
+      date: date || { [Op.gte]: new Date().toISOString().split('T')[0] }
     };
 
+    // Only filter by locked status if includeLocked is not set
+    if (!includeLocked) {
+      whereClause[Op.or] = [
+        { lockedUntil: null },
+        { lockedUntil: { [Op.lt]: new Date() } }
+      ];
+    }
+
     if (caregiverId) whereClause.caregiverId = caregiverId;
-    if (date) whereClause.date = date;
 
     const slots = await TimeSlot.findAll({
       where: whereClause,
       include: [{ model: Caregiver, attributes: ['id', 'hourlyRate'] }],
-      order: [['date', 'ASC'], ['startTime', 'ASC']]
+      order: [['date', 'ASC'], ['startTime', 'ASC']],
+      limit: 100 // Prevent returning too many slots
     });
 
-    res.json({ slots });
+    res.json({
+      slots,
+      count: slots.length,
+      filters: {
+        caregiverId: caregiverId || 'all',
+        date: date || `>= ${new Date().toISOString().split('T')[0]}`,
+        status: 'available'
+      }
+    });
   } catch (error) {
     next(error);
   }

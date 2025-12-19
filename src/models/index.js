@@ -16,6 +16,7 @@ const StatusAlert = require('./StatusAlert');
 const UserSettings = require('./UserSettings');
 const TimeSlot = require('./TimeSlot');
 const CaregiverAvailability = require('./CaregiverAvailability');
+const Location = require('./Location');
 
 // Define associations
 // User-Role association
@@ -109,5 +110,6 @@ module.exports = {
   StatusAlert,
   UserSettings,
   TimeSlot,
-  CaregiverAvailability
+  CaregiverAvailability,
+  Location
 };

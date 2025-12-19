@@ -13,7 +13,7 @@ const register = async (req, res, next) => {
   const transaction = await User.sequelize.transaction();
   
   try {
-    const { email, password, firstName, lastName, phone, role = 'patient', ...roleSpecificData } = req.body;
+    const { email, password, firstName, lastName, phone, idNumber, role = 'patient', ...roleSpecificData } = req.body;
     const uploadedFiles = req.files || [];
 
     // Find the role
@@ -37,6 +37,7 @@ const register = async (req, res, next) => {
       firstName,
       lastName,
       phone,
+      idNumber,
       role_id: userRole.id,
       isActive: role !== 'caregiver' // Caregivers need approval
     }, { transaction });
@@ -46,7 +47,16 @@ const register = async (req, res, next) => {
       case 'patient':
         await Patient.create({
           userId: user.id,
-          ...roleSpecificData
+          dateOfBirth: roleSpecificData.dateOfBirth,
+          address: roleSpecificData.address,
+          emergencyContact: roleSpecificData.emergencyContact,
+          medicalHistory: roleSpecificData.medicalHistory,
+          currentMedications: roleSpecificData.currentMedications,
+          allergies: roleSpecificData.allergies,
+          region: roleSpecificData.region,
+          district: roleSpecificData.district,
+          traditionalAuthority: roleSpecificData.traditionalAuthority,
+          village: roleSpecificData.village
         }, { transaction });
         break;
       case 'caregiver':
@@ -71,12 +81,18 @@ const register = async (req, res, next) => {
         
         const caregiver = await Caregiver.create({
           userId: user.id,
+          licensingInstitution: roleSpecificData.licensingInstitution,
           licenseNumber: roleSpecificData.licenseNumber || `TEMP-${Date.now()}`,
           experience: roleSpecificData.experience || 0,
           qualifications: roleSpecificData.qualifications || 'To be updated',
           hourlyRate: roleSpecificData.hourlyRate || 50.00,
+          appointmentDuration: parseInt(process.env.DEFAULT_APPOINTMENT_DURATION) || 180,
           supportingDocuments: documentUrls,
-          ...roleSpecificData
+          bio: roleSpecificData.bio,
+          region: roleSpecificData.region,
+          district: roleSpecificData.district,
+          traditionalAuthority: roleSpecificData.traditionalAuthority,
+          village: roleSpecificData.village
         }, { transaction });
         
         // Handle specialties

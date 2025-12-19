@@ -5,7 +5,7 @@ const { sendAppointmentConfirmation } = require('../services/emailService');
 const createAppointment = async (req, res, next) => {
   try {
     const { timeSlotId, specialtyId, sessionType, notes } = req.body;
-    
+
     // Get patient ID from authenticated user
     const patient = await Patient.findOne({ where: { userId: req.user.id } });
     if (!patient) {
@@ -24,6 +24,16 @@ const createAppointment = async (req, res, next) => {
       return res.status(400).json({ error: 'Time slot lock expired' });
     }
 
+    // Get specialty to fetch booking and session fees
+    const specialty = await Specialty.findByPk(specialtyId);
+    if (!specialty) {
+      return res.status(404).json({ error: 'Specialty not found' });
+    }
+
+    const bookingFee = specialty.bookingFee || 0;
+    const sessionFee = specialty.sessionFee || 0;
+    const totalCost = parseFloat(bookingFee) + parseFloat(sessionFee);
+
     const appointment = await Appointment.create({
       patientId: patient.id,
       caregiverId: timeSlot.caregiverId,
@@ -32,9 +42,13 @@ const createAppointment = async (req, res, next) => {
       duration: timeSlot.duration,
       sessionType,
       notes,
-      totalCost: timeSlot.price,
+      bookingFee,
+      sessionFee,
+      totalCost,
       timeSlotId,
-      paymentStatus: PAYMENT_STATUS.PENDING,
+      bookingFeeStatus: PAYMENT_STATUS.PENDING,
+      sessionFeeStatus: PAYMENT_STATUS.PENDING,
+      paymentStatus: PAYMENT_STATUS.PENDING, // Overall status
       bookedAt: new Date()
     });
 
@@ -46,7 +60,15 @@ const createAppointment = async (req, res, next) => {
       lockedUntil: null
     });
 
-    res.status(201).json({ appointment, timeSlot });
+    res.status(201).json({
+      appointment,
+      timeSlot,
+      fees: {
+        bookingFee,
+        sessionFee,
+        totalCost
+      }
+    });
   } catch (error) {
     next(error);
   }
@@ -62,10 +84,11 @@ const getAppointments = async (req, res, next) => {
     if (req.user.role === USER_ROLES.PATIENT) {
       const patient = await Patient.findOne({ where: { userId: req.user.id } });
       whereClause.patientId = patient.id;
-      whereClause.paymentStatus = PAYMENT_STATUS.COMPLETED; // Only paid appointments
     } else if (req.user.role === USER_ROLES.CAREGIVER) {
       const caregiver = await Caregiver.findOne({ where: { userId: req.user.id } });
       whereClause.caregiverId = caregiver.id;
+      // Show appointments where at least booking fee is paid
+      whereClause.bookingFeeStatus = PAYMENT_STATUS.COMPLETED;
     }
 
     if (status) {
@@ -148,8 +171,8 @@ const updateAppointmentStatus = async (req, res, next) => {
 
 const confirmPayment = async (req, res, next) => {
   try {
-    const { appointmentId } = req.body;
-    
+    const { appointmentId, paymentType = 'booking_fee' } = req.body;
+
     const appointment = await Appointment.findByPk(appointmentId, {
       include: [{ model: Caregiver }, { model: TimeSlot }]
     });
@@ -158,17 +181,151 @@ const confirmPayment = async (req, res, next) => {
       return res.status(404).json({ error: 'Appointment not found' });
     }
 
-    // Update payment status
-    appointment.paymentStatus = PAYMENT_STATUS.COMPLETED;
-    
-    // Auto-confirm if caregiver has auto-confirm enabled
-    if (appointment.Caregiver.autoConfirm) {
-      appointment.status = APPOINTMENT_STATUS.CONFIRMED;
+    // Update payment status based on payment type
+    if (paymentType === 'booking_fee') {
+      appointment.bookingFeeStatus = PAYMENT_STATUS.COMPLETED;
+      appointment.bookedAt = new Date();
+
+      // Auto-confirm if caregiver has auto-confirm enabled
+      if (appointment.Caregiver.autoConfirm) {
+        appointment.status = APPOINTMENT_STATUS.CONFIRMED;
+      }
+    } else if (paymentType === 'session_fee') {
+      appointment.sessionFeeStatus = PAYMENT_STATUS.COMPLETED;
+      appointment.sessionPaidAt = new Date();
     }
-    
+
+    // Update overall payment status
+    if (appointment.bookingFeeStatus === PAYMENT_STATUS.COMPLETED &&
+        appointment.sessionFeeStatus === PAYMENT_STATUS.COMPLETED) {
+      appointment.paymentStatus = PAYMENT_STATUS.COMPLETED;
+    }
+
     await appointment.save();
 
     res.json({ appointment });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const paySessionFee = async (req, res, next) => {
+  try {
+    const { appointmentId } = req.body;
+
+    const appointment = await Appointment.findByPk(appointmentId);
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Check if booking fee was paid
+    if (appointment.bookingFeeStatus !== PAYMENT_STATUS.COMPLETED) {
+      return res.status(400).json({ error: 'Booking fee must be paid first' });
+    }
+
+    // Check if session fee is already paid
+    if (appointment.sessionFeeStatus === PAYMENT_STATUS.COMPLETED) {
+      return res.status(400).json({ error: 'Session fee already paid' });
+    }
+
+    // Update session fee status
+    appointment.sessionFeeStatus = PAYMENT_STATUS.COMPLETED;
+    appointment.sessionPaidAt = new Date();
+
+    // Update overall payment status
+    if (appointment.bookingFeeStatus === PAYMENT_STATUS.COMPLETED) {
+      appointment.paymentStatus = PAYMENT_STATUS.COMPLETED;
+    }
+
+    await appointment.save();
+
+    res.json({
+      success: true,
+      message: 'Session fee paid successfully',
+      appointment
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const submitPatientFeedback = async (req, res, next) => {
+  try {
+    const { appointmentId, feedback, rating } = req.body;
+
+    // Get patient from authenticated user
+    const patient = await Patient.findOne({ where: { userId: req.user.id } });
+    if (!patient) {
+      return res.status(403).json({ error: 'Only patients can submit feedback' });
+    }
+
+    const appointment = await Appointment.findByPk(appointmentId);
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Verify this appointment belongs to the patient
+    if (appointment.patientId !== patient.id) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    // Check if session fee was paid
+    if (appointment.sessionFeeStatus !== PAYMENT_STATUS.COMPLETED) {
+      return res.status(400).json({ error: 'Session fee must be paid before submitting feedback' });
+    }
+
+    // Update feedback
+    appointment.patientFeedback = feedback;
+    if (rating) {
+      appointment.patientRating = rating;
+    }
+
+    await appointment.save();
+
+    res.json({
+      success: true,
+      message: 'Feedback submitted successfully',
+      appointment
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const markAppointmentCompleted = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Get caregiver from authenticated user
+    const caregiver = await Caregiver.findOne({ where: { userId: req.user.id } });
+    if (!caregiver) {
+      return res.status(403).json({ error: 'Only caregivers can mark appointments as completed' });
+    }
+
+    const appointment = await Appointment.findByPk(id);
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Verify this appointment belongs to the caregiver
+    if (appointment.caregiverId !== caregiver.id) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    // Check if session fee was paid
+    if (appointment.sessionFeeStatus !== PAYMENT_STATUS.COMPLETED) {
+      return res.status(400).json({ error: 'Session fee must be paid before marking as completed' });
+    }
+
+    // Mark as completed
+    appointment.status = APPOINTMENT_STATUS.COMPLETED;
+    await appointment.save();
+
+    res.json({
+      success: true,
+      message: 'Appointment marked as completed',
+      appointment
+    });
   } catch (error) {
     next(error);
   }
@@ -179,5 +336,8 @@ module.exports = {
   getAppointments,
   getAppointmentById,
   updateAppointmentStatus,
-  confirmPayment
+  confirmPayment,
+  paySessionFee,
+  submitPatientFeedback,
+  markAppointmentCompleted
 };

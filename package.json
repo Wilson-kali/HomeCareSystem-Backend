@@ -9,7 +9,9 @@
     "db:seed": "node src/scripts/seed.js",
     "db:init": "node src/scripts/initDb.js",
     "db:migrate-booking": "node src/scripts/runMigration.js",
-    "db:migrate-safe": "node -e \"require('./src/scripts/safeMigration')().then(() => process.exit(0)).catch(e => {console.error(e); process.exit(1)})\""
+    "db:migrate-safe": "node -e \"require('./src/scripts/safeMigration')().then(() => process.exit(0)).catch(e => {console.error(e); process.exit(1)})\"",
+    "populate-locations": "node src/scripts/populateLocations.js",
+    "add-location-fields": "node src/scripts/addLocationFields.js"
   },
   "keywords": [],
   "author": "",
@@ -20,6 +22,7 @@
     "bcryptjs": "^3.0.3",
     "cloudinary": "^2.8.0",
     "cors": "^2.8.5",
+    "csv-parser": "^3.2.0",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "express-validator": "^7.3.1",

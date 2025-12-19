@@ -15,9 +15,10 @@ module.exports = {
   
   APPOINTMENT_STATUS: {
     PENDING: 'pending',
-    CONFIRMED: 'confirmed',
-    COMPLETED: 'completed',
-    CANCELLED: 'cancelled'
+    SESSION_WAITING: 'session_waiting',
+    SESSION_ATTENDED: 'session_attended',
+    SESSION_CANCELLED: 'session_cancelled',
+    SESSION_RESCHEDULED: 'session_rescheduled'
   },
   
   PATIENT_STATUS: {

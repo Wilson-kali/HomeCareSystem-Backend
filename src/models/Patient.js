@@ -32,6 +32,23 @@ const Patient = sequelize.define('Patient', {
   },
   allergies: {
     type: DataTypes.TEXT
+  },
+  region: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  district: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  traditionalAuthority: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    field: 'traditional_authority'
+  },
+  village: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 }, {
   tableName: 'patients'

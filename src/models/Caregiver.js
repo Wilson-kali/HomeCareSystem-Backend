@@ -13,6 +13,10 @@ const Caregiver = sequelize.define('Caregiver', {
     allowNull: false,
     references: { model: 'Users', key: 'id' }
   },
+  licensingInstitution: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
   licenseNumber: {
     type: DataTypes.STRING,
     allowNull: false,
@@ -50,13 +54,30 @@ const Caregiver = sequelize.define('Caregiver', {
   },
   appointmentDuration: {
     type: DataTypes.INTEGER,
-    defaultValue: 60,
+    defaultValue: parseInt(process.env.DEFAULT_APPOINTMENT_DURATION) || 180,
     comment: 'Default appointment duration in minutes'
   },
   autoConfirm: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,
     comment: 'Auto-confirm appointments after payment'
+  },
+  region: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  district: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  traditionalAuthority: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    field: 'traditional_authority'
+  },
+  village: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 });
 

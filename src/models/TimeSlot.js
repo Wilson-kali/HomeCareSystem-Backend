@@ -31,11 +31,13 @@ const TimeSlot = sequelize.define('TimeSlot', {
   duration: {
     type: DataTypes.INTEGER,
     allowNull: false,
-    comment: 'Duration in minutes'
+    defaultValue: 180,
+    comment: 'Duration in minutes (default 3 hours)'
   },
   price: {
     type: DataTypes.DECIMAL(10, 2),
-    allowNull: false
+    allowNull: true,
+    comment: 'Deprecated - prices are now on specialties'
   },
   status: {
     type: DataTypes.ENUM,

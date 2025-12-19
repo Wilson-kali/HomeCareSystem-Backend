@@ -3,40 +3,42 @@ const { sanitizeUser } = require('../utils/helpers');
 
 const router = express.Router();
 
-// Get active verified caregivers
+// Get active caregivers (all verification statuses)
 router.get('/caregivers', async (req, res, next) => {
   try {
-    const { User, Role, Caregiver } = require('../models');
+    const { User, Role, Caregiver, Specialty } = require('../models');
     const caregiverRole = await Role.findOne({ where: { name: 'caregiver' } });
-    
+
     const caregivers = await User.findAll({
-      where: { 
+      where: {
         role_id: caregiverRole.id,
         isActive: true
       },
       include: [
-        { 
+        {
           model: Caregiver,
-          where: { verificationStatus: 'verified' }
+          required: false, // Left join to include all users even without caregiver profile
+          include: [
+            {
+              model: Specialty,
+              through: {
+                attributes: [] // No additional attributes needed from pivot table
+              },
+              attributes: ['id', 'name', 'description', 'sessionFee', 'bookingFee']
+            }
+          ]
         },
         { model: Role }
       ],
-      limit: 10,
       order: [['createdAt', 'DESC']]
     });
 
-    const formattedCaregivers = caregivers.map(user => ({
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      qualifications: user.Caregiver?.qualifications || 'Healthcare Professional',
-      experience: user.Caregiver?.yearsOfExperience || 0,
-      hourlyRate: user.Caregiver?.hourlyRate || 50000
-    }));
+    // Return in the format the frontend expects - keep nested structure
+    const formattedCaregivers = caregivers.map(user => user.toJSON());
 
-    res.json({ 
+    res.json({
       success: true,
-      data: formattedCaregivers 
+      caregivers: formattedCaregivers // Changed from 'data' to 'caregivers'
     });
   } catch (error) {
     next(error);

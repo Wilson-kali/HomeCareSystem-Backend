@@ -1,11 +1,14 @@
 const express = require('express');
 const { body } = require('express-validator');
-const { 
-  createAppointment, 
-  getAppointments, 
+const {
+  createAppointment,
+  getAppointments,
   updateAppointmentStatus,
   getAppointmentById,
-  confirmPayment
+  confirmPayment,
+  paySessionFee,
+  submitPatientFeedback,
+  markAppointmentCompleted
 } = require('../controllers/appointmentController');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const { handleValidationErrors } = require('../middleware/validator.middleware');
@@ -52,5 +55,8 @@ router.get('/caregiver', async (req, res, next) => {
 router.get('/:id', getAppointmentById);
 router.patch('/:id/status', updateAppointmentStatus);
 router.post('/confirm-payment', confirmPayment);
+router.post('/pay-session-fee', paySessionFee);
+router.post('/submit-feedback', submitPatientFeedback);
+router.patch('/:id/complete', markAppointmentCompleted);
 
 module.exports = router;
