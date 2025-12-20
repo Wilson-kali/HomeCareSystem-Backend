@@ -37,8 +37,8 @@ User.hasOne(PrimaryPhysician, { foreignKey: 'userId' });
 PrimaryPhysician.belongsTo(User, { foreignKey: 'userId' });
 
 // Caregiver-Specialty many-to-many
-Caregiver.belongsToMany(Specialty, { through: 'CaregiverSpecialties' });
-Specialty.belongsToMany(Caregiver, { through: 'CaregiverSpecialties' });
+Caregiver.belongsToMany(Specialty, { through: 'caregiverspecialties' });
+Specialty.belongsToMany(Caregiver, { through: 'caregiverspecialties' });
 
 // Appointments
 Patient.hasMany(Appointment, { foreignKey: 'patientId' });
