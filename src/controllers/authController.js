@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const crypto = require('crypto');
 const { User, Patient, Caregiver, PrimaryPhysician, Role } = require('../models');
 const { jwtSecret, jwtExpiresIn, bcryptRounds } = require('../config/auth');
 const { USER_ROLES } = require('../utils/constants');
@@ -250,9 +251,100 @@ const getProfile = async (req, res, next) => {
   }
 };
 
+const forgotPassword = async (req, res, next) => {
+  try {
+    const { email } = req.body;
+    console.log('🔐 Forgot password request for:', email);
+
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      console.log('⚠️ User not found for email:', email);
+      // Don't reveal if email exists or not for security
+      return res.json({ message: 'If the email exists, a reset link has been sent.' });
+    }
+
+    console.log('✅ User found:', user.firstName, user.lastName);
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour from now
+
+    console.log('🔑 Generated reset token:', resetToken.substring(0, 10) + '...');
+    console.log('⏰ Token expires at:', resetTokenExpiry);
+
+    // Save token to user
+    await user.update({
+      resetPasswordToken: resetToken,
+      resetPasswordExpires: resetTokenExpiry
+    });
+
+    console.log('💾 Token saved to database');
+
+    // Send email with reset link
+    try {
+      const emailService = require('../services/emailService');
+      const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+      
+      console.log('🔗 Reset URL:', resetUrl);
+      console.log('📧 Sending email to:', user.email);
+      
+      await emailService.sendPasswordResetEmail(user.email, user.firstName, resetUrl);
+      console.log('✅ Password reset email sent successfully!');
+    } catch (emailError) {
+      console.error('💥 Failed to send password reset email:', emailError);
+      return res.status(500).json({ error: 'Failed to send reset email' });
+    }
+
+    res.json({ message: 'Password reset email sent successfully' });
+  } catch (error) {
+    console.error('💥 Forgot password error:', error);
+    next(error);
+  }
+};
+
+const resetPassword = async (req, res, next) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({ error: 'Token and password are required' });
+    }
+
+    // Find user with valid reset token
+    const user = await User.findOne({
+      where: {
+        resetPasswordToken: token,
+        resetPasswordExpires: {
+          [require('sequelize').Op.gt]: new Date()
+        }
+      }
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(password, bcryptRounds);
+
+    // Update user password and clear reset token
+    await user.update({
+      password: hashedPassword,
+      resetPasswordToken: null,
+      resetPasswordExpires: null
+    });
+
+    res.json({ message: 'Password reset successfully' });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   register,
   registerAdmin,
   login,
-  getProfile
+  getProfile,
+  forgotPassword,
+  resetPassword
 };

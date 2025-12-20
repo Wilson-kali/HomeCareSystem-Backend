@@ -1,5 +1,7 @@
 const { CareSessionReport, Appointment, Patient, Caregiver, User, Specialty } = require('../models');
 const { APPOINTMENT_STATUS } = require('../utils/constants');
+const { uploadToCloudinary } = require('../services/cloudinaryService');
+const fs = require('fs').promises;
 
 // Create or update care session report (Caregiver only)
 const createOrUpdateCareReport = async (req, res, next) => {
@@ -16,8 +18,7 @@ const createOrUpdateCareReport = async (req, res, next) => {
       followUpDate,
       medications,
       activities,
-      notes,
-      attachments
+      notes
     } = req.body;
 
     // Get caregiver from authenticated user
@@ -41,14 +42,61 @@ const createOrUpdateCareReport = async (req, res, next) => {
       return res.status(400).json({ error: 'Session fee must be paid before creating a care report' });
     }
 
+    // Handle file uploads
+    let attachmentsData = [];
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        try {
+          // Upload to cloudinary
+          const uploadResult = await uploadToCloudinary(file, 'care-reports');
+
+          // Store file metadata
+          attachmentsData.push({
+            filename: file.originalname,
+            url: uploadResult.url,
+            path: uploadResult.url,
+            public_id: uploadResult.public_id,
+            size: file.size,
+            mimetype: file.mimetype,
+            uploadedAt: new Date()
+          });
+
+          // Delete local file after upload
+          try {
+            await fs.unlink(file.path);
+          } catch (unlinkError) {
+            console.error('Error deleting local file:', unlinkError);
+          }
+        } catch (uploadError) {
+          console.error('Error uploading file:', uploadError);
+          // Continue with other files even if one fails
+        }
+      }
+    }
+
     // Check if report already exists
     let careReport = await CareSessionReport.findOne({ where: { appointmentId } });
+
+    // Parse vitals if it's a string
+    let vitalsData = vitals;
+    if (typeof vitals === 'string') {
+      try {
+        vitalsData = JSON.parse(vitals);
+      } catch (e) {
+        vitalsData = {};
+      }
+    }
+
+    // If updating existing report, merge attachments
+    if (careReport && careReport.attachments) {
+      attachmentsData = [...careReport.attachments, ...attachmentsData];
+    }
 
     const reportData = {
       appointmentId,
       observations,
       interventions,
-      vitals,
+      vitals: vitalsData,
       patientStatus,
       sessionSummary,
       recommendations,
@@ -57,7 +105,7 @@ const createOrUpdateCareReport = async (req, res, next) => {
       medications,
       activities,
       notes,
-      attachments: attachments || []
+      attachments: attachmentsData
     };
 
     if (careReport) {

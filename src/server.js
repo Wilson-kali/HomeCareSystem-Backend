@@ -5,11 +5,20 @@ const helmet = require('helmet');
 const morgan = require('morgan');
 const { createServer } = require('http');
 const { Server } = require('socket.io');
+const path = require('path');
+const fs = require('fs');
 
 const db = require('./models');
 const routes = require('./routes');
 const { errorHandler } = require('./middleware/errorHandler.middleware');
 const logger = require('./utils/logger');
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, '..', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+  logger.info('✅ Uploads directory created');
+}
 
 const app = express();
 const server = createServer(app);

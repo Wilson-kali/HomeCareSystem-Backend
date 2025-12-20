@@ -29,7 +29,8 @@ const initiateBookingPayment = async (bookingData, customerDetails) => {
 
     // Use booking fee for initial payment
     const paymentAmount = bookingFee;
-    
+    const paymentType = 'booking_fee';
+
     // Paychangu API payload - matching working test format
     const paymentData = {
       amount: paymentAmount,
@@ -43,7 +44,7 @@ const initiateBookingPayment = async (bookingData, customerDetails) => {
       tx_ref: tx_ref,
       customization: {
         title: 'Home Care System',
-        description: `Booking Fee for Appointment #${appointmentId}`
+        description: `Booking Fee for Appointment with ${specialty.name}`
       }
     };
 
@@ -94,7 +95,13 @@ const initiateBookingPayment = async (bookingData, customerDetails) => {
       }
     });
 
-    logger.info(`Payment initiated: ${tx_ref}`, { appointmentId, amount: appointment.totalCost });
+    logger.info(`Booking payment initiated: ${tx_ref}`, {
+      timeSlotId,
+      specialtyId,
+      amount: paymentAmount,
+      bookingFee,
+      sessionFee
+    });
 
     return {
       transaction,
@@ -290,28 +297,47 @@ const processWebhook = async (webhookData, signature) => {
             logger.info(`Session fee payment completed for appointment ${appointment.id}`);
           } else {
             // Default to booking fee
-            let overallPaymentStatus = PAYMENT_STATUS.PARTIAL;
+            let overallPaymentStatus = 'partial';
+            let appointmentStatus = 'session_waiting';
+
             if (appointment.sessionFeeStatus === PAYMENT_STATUS.COMPLETED) {
-              overallPaymentStatus = PAYMENT_STATUS.COMPLETED;
+              overallPaymentStatus = 'completed';
+              appointmentStatus = 'session_attended';
             }
-            
+
             logger.info(`Updating booking fee for appointment ${appointment.id}:`, {
               bookingFeeStatus: 'completed',
               sessionFeeStatus: appointment.sessionFeeStatus,
               paymentStatus: overallPaymentStatus,
-              status: APPOINTMENT_STATUS.SESSION_WAITING
+              status: appointmentStatus
             });
-            
-            // Force update booking fee fields using exact database field names
-            await Appointment.update({
-              booking_fee_status: PAYMENT_STATUS.COMPLETED,
-              paymentStatus: overallPaymentStatus,
-              status: APPOINTMENT_STATUS.SESSION_WAITING,
-              bookedAt: new Date()
-            }, {
-              where: { id: appointment.id }
+
+            // Force update booking fee fields using raw SQL with exact column names
+            const { QueryTypes } = require('sequelize');
+            const sequelize = require('../config/database');
+            const currentTime = new Date();
+
+            logger.info(`SQL Update values:`, {
+              currentTime,
+              overallPaymentStatus,
+              appointmentStatus,
+              appointmentId: appointment.id
             });
-            
+
+            await sequelize.query(
+              `UPDATE Appointments SET
+               booking_fee_status = 'completed',
+               bookedAt = ?,
+               paymentStatus = ?,
+               status = ?,
+               updatedAt = ?
+               WHERE id = ?`,
+              {
+                replacements: [currentTime, overallPaymentStatus, appointmentStatus, currentTime, appointment.id],
+                type: QueryTypes.UPDATE
+              }
+            );
+
             logger.info(`Booking fee payment completed for appointment ${appointment.id}`);
           }
         }
@@ -480,7 +506,7 @@ const initiatePayment = async (appointmentId, customerDetails, paymentType = 'bo
         checkout_url: response.data.data?.checkout_url,
         tx_ref: response.data.data?.data?.tx_ref || tx_ref,
         mode: response.data.data?.data?.mode,
-        paymentType: 'booking_fee'
+        paymentType: paymentType
       }
     });
 

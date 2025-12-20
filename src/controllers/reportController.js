@@ -1,5 +1,6 @@
 const { CareSessionReport, Appointment, Patient, Caregiver, User } = require('../models');
 const { createStatusAlert } = require('../services/notificationService');
+const { uploadToCloudinary } = require('../services/cloudinaryService');
 const { PATIENT_STATUS, APPOINTMENT_STATUS } = require('../utils/constants');
 
 const createReport = async (req, res, next) => {
@@ -13,8 +14,22 @@ const createReport = async (req, res, next) => {
       sessionSummary,
       recommendations,
       followUpRequired,
-      attachments
+      followUpDate
     } = req.body;
+
+    // Handle file uploads
+    let uploadedAttachments = [];
+    if (req.files && req.files.length > 0) {
+      for (const file of req.files) {
+        const uploadResult = await uploadToCloudinary(file, 'care-reports');
+        uploadedAttachments.push({
+          url: uploadResult.url,
+          public_id: uploadResult.public_id,
+          filename: file.originalname,
+          format: uploadResult.format
+        });
+      }
+    }
 
     // Verify appointment exists and belongs to caregiver
     const appointment = await Appointment.findByPk(appointmentId, {
@@ -29,12 +44,13 @@ const createReport = async (req, res, next) => {
       appointmentId,
       observations,
       interventions,
-      vitals,
+      vitals: typeof vitals === 'string' ? JSON.parse(vitals) : vitals,
       patientStatus,
       sessionSummary,
       recommendations,
-      followUpRequired,
-      attachments
+      followUpRequired: followUpRequired === 'true',
+      followUpDate: followUpDate || null,
+      attachments: uploadedAttachments
     });
 
     // Update appointment status to completed
@@ -43,15 +59,26 @@ const createReport = async (req, res, next) => {
 
     // Create status alert if needed
     if ([PATIENT_STATUS.DETERIORATING, PATIENT_STATUS.CRITICAL, PATIENT_STATUS.DECEASED].includes(patientStatus)) {
-      await createStatusAlert(
-        appointment.patientId,
-        report.id,
-        patientStatus,
-        {
-          name: `${appointment.Patient.User.firstName} ${appointment.Patient.User.lastName}`,
-          emergencyContactEmail: appointment.Patient.emergencyContact
+      try {
+        // Use patient's email from User table
+        const patientEmail = appointment.Patient.User.email;
+        if (patientEmail && patientEmail.includes('@') && patientEmail.includes('.')) {
+          await createStatusAlert(
+            appointment.patientId,
+            report.id,
+            patientStatus,
+            {
+              name: `${appointment.Patient.User.firstName} ${appointment.Patient.User.lastName}`,
+              emergencyContactEmail: patientEmail
+            }
+          );
+        } else {
+          console.log('Skipping status alert - invalid or missing patient email');
         }
-      );
+      } catch (alertError) {
+        console.error('Status alert creation failed:', alertError.message);
+        // Don't fail the entire report creation if alert fails
+      }
     }
 
     res.status(201).json({ report });

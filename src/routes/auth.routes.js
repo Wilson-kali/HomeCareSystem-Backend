@@ -1,6 +1,6 @@
 const express = require('express');
 const { body } = require('express-validator');
-const { register, registerAdmin, login, getProfile } = require('../controllers/authController');
+const { register, registerAdmin, login, getProfile, forgotPassword, resetPassword } = require('../controllers/authController');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const { handleValidationErrors } = require('../middleware/validator.middleware');
 const { uploadMultiple } = require('../middleware/upload.middleware');
@@ -30,9 +30,20 @@ const loginValidation = [
   body('password').notEmpty()
 ];
 
+const forgotPasswordValidation = [
+  body('email').isEmail().normalizeEmail()
+];
+
+const resetPasswordValidation = [
+  body('token').notEmpty(),
+  body('password').isLength({ min: 6 })
+];
+
 router.post('/register', uploadMultiple, registerValidation, handleValidationErrors, register);
 router.post('/register-admin', adminRegisterValidation, handleValidationErrors, registerAdmin);
 router.post('/login', loginValidation, handleValidationErrors, login);
+router.post('/forgot-password', forgotPasswordValidation, handleValidationErrors, forgotPassword);
+router.post('/reset-password', resetPasswordValidation, handleValidationErrors, resetPassword);
 router.get('/profile', authenticateToken, getProfile);
 
 module.exports = router;

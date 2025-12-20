@@ -4,6 +4,7 @@ const { createReport, getReports, getReportById } = require('../controllers/repo
 const { authenticateToken } = require('../middleware/auth.middleware');
 const { requireCaregiver } = require('../middleware/roleCheck.middleware');
 const { handleValidationErrors } = require('../middleware/validator.middleware');
+const { upload } = require('../middleware/upload.middleware');
 
 const router = express.Router();
 
@@ -17,7 +18,7 @@ const createReportValidation = [
 
 router.use(authenticateToken);
 
-router.post('/', requireCaregiver, createReportValidation, handleValidationErrors, createReport);
+router.post('/', requireCaregiver, upload.array('attachments', 5), createReportValidation, handleValidationErrors, createReport);
 router.get('/', getReports);
 router.get('/caregiver', async (req, res, next) => {
   try {

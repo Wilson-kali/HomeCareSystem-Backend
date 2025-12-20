@@ -5,20 +5,30 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 
 const sendEmail = async (to, subject, html) => {
   try {
+    console.log('🔄 Attempting to send email...');
+    console.log('📧 To:', to);
+    console.log('📝 Subject:', subject);
+    console.log('🔑 API Key exists:', !!process.env.RESEND_API_KEY);
+    console.log('📤 From:', `${process.env.MAIL_FROM_NAME} <${process.env.MAIL_FROM_ADDRESS}>`);
+
     const { data, error } = await resend.emails.send({
       from: `${process.env.MAIL_FROM_NAME} <${process.env.MAIL_FROM_ADDRESS}>`,
       to: [to],
       subject,
       html
     });
-    
+
     if (error) {
+      console.error('❌ Resend API Error:', error);
       throw error;
     }
-    
+
+    console.log('✅ Email sent successfully!');
+    console.log('📨 Email ID:', data.id);
     logger.info(`Email sent: ${data.id}`);
     return data;
   } catch (error) {
+    console.error('💥 Email sending failed:', error);
     logger.error('Email sending failed:', error);
     throw error;
   }
@@ -40,18 +50,17 @@ const sendAppointmentConfirmation = async (patientEmail, appointmentDetails) => 
     <html>
     <head>
       <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 0; }
-        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 20px; text-align: center; }
-        .header h1 { margin: 0; font-size: 28px; }
-        .content { background: #f9f9f9; padding: 30px 20px; }
-        .details { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .detail-row { padding: 12px 0; border-bottom: 1px solid #eee; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 20px auto; background: white; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: #1a1a1a; }
+        .content { padding: 30px 20px; }
+        .details { padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; margin: 20px 0; }
+        .detail-row { padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
         .detail-row:last-child { border-bottom: none; }
-        .detail-row strong { display: inline-block; min-width: 120px; color: #667eea; }
-        .button { display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-        .button:hover { background: #5568d3; }
-        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; background: #f0f0f0; }
+        .detail-row strong { display: inline-block; min-width: 120px; color: #1a1a1a; font-weight: 600; }
+        .button { display: inline-block; background: #1a1a1a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 20px 0; font-size: 14px; font-weight: 500; }
+        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
       </style>
     </head>
     <body>
@@ -103,34 +112,25 @@ const sendAppointmentConfirmation = async (patientEmail, appointmentDetails) => 
 };
 
 const sendStatusAlert = async (recipientEmail, alertDetails) => {
-  const subject = `⚠️ Patient Status Alert - ${alertDetails.severity.toUpperCase()}`;
-
-  const severityColors = {
-    low: '#3b82f6',
-    medium: '#f59e0b',
-    high: '#ef4444',
-    critical: '#dc2626'
-  };
-
-  const severityColor = severityColors[alertDetails.severity] || '#f59e0b';
+  const subject = `Patient Status Alert - ${alertDetails.severity.toUpperCase()}`;
 
   const html = `
     <!DOCTYPE html>
     <html>
     <head>
       <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 0; }
-        .header { background: ${severityColor}; color: white; padding: 30px 20px; text-align: center; }
-        .header h1 { margin: 0; font-size: 28px; }
-        .content { background: #f9f9f9; padding: 30px 20px; }
-        .alert-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 4px solid ${severityColor}; }
-        .detail-row { padding: 12px 0; border-bottom: 1px solid #eee; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 20px auto; background: white; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: #1a1a1a; }
+        .content { padding: 30px 20px; }
+        .alert-box { padding: 20px; border: 2px solid #1a1a1a; border-radius: 4px; margin: 20px 0; }
+        .detail-row { padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
         .detail-row:last-child { border-bottom: none; }
-        .detail-row strong { display: inline-block; min-width: 120px; color: ${severityColor}; }
-        .severity-badge { display: inline-block; padding: 6px 12px; border-radius: 4px; background: ${severityColor}; color: white; font-weight: bold; text-transform: uppercase; font-size: 12px; }
-        .button { display: inline-block; background: ${severityColor}; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; background: #f0f0f0; }
+        .detail-row strong { display: inline-block; min-width: 120px; color: #1a1a1a; font-weight: 600; }
+        .severity-badge { display: inline-block; padding: 4px 12px; border: 1px solid #1a1a1a; border-radius: 4px; background: #f5f5f5; color: #1a1a1a; font-weight: 600; text-transform: uppercase; font-size: 11px; }
+        .button { display: inline-block; background: #1a1a1a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 20px 0; font-size: 14px; font-weight: 500; }
+        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
       </style>
     </head>
     <body>
@@ -192,11 +192,12 @@ const sendPasswordChangeNotification = async (email, firstName) => {
     <html>
     <head>
       <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 0; }
-        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 20px; text-align: center; }
-        .content { background: #f9f9f9; padding: 30px 20px; }
-        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; background: #f0f0f0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 20px auto; background: white; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: #1a1a1a; }
+        .content { padding: 30px 20px; }
+        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
       </style>
     </head>
     <body>
@@ -217,7 +218,7 @@ const sendPasswordChangeNotification = async (email, firstName) => {
     </body>
     </html>
   `;
-  
+
   return sendEmail(email, subject, html);
 };
 
@@ -229,11 +230,12 @@ const sendCaregiverRegistrationNotification = async (email, firstName) => {
     <html>
     <head>
       <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 0; }
-        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 20px; text-align: center; }
-        .content { background: #f9f9f9; padding: 30px 20px; }
-        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; background: #f0f0f0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 20px auto; background: white; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: #1a1a1a; }
+        .content { padding: 30px 20px; }
+        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
       </style>
     </head>
     <body>
@@ -255,7 +257,7 @@ const sendCaregiverRegistrationNotification = async (email, firstName) => {
     </body>
     </html>
   `;
-  
+
   return sendEmail(email, subject, html);
 };
 
@@ -267,11 +269,12 @@ const sendCaregiverApprovalNotification = async (email, firstName) => {
     <html>
     <head>
       <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 0; }
-        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px 20px; text-align: center; }
-        .content { background: #f9f9f9; padding: 30px 20px; }
-        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; background: #f0f0f0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 20px auto; background: white; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: #1a1a1a; }
+        .content { padding: 30px 20px; }
+        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
       </style>
     </head>
     <body>
@@ -293,7 +296,65 @@ const sendCaregiverApprovalNotification = async (email, firstName) => {
     </body>
     </html>
   `;
-  
+
+  return sendEmail(email, subject, html);
+};
+
+const sendPasswordResetEmail = async (email, firstName, resetUrl) => {
+  const systemName = process.env.SYSTEM || 'CareConnect';
+  const subject = `Password Reset Request - ${systemName}`;
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 20px auto; background: white; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: #1a1a1a; }
+        .content { padding: 30px 20px; }
+        .reset-box { padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; margin: 20px 0; text-align: center; }
+        .button { display: inline-block; background: #1a1a1a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 20px 0; font-weight: 500; font-size: 14px; }
+        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
+        .warning { background: #fafafa; border: 1px solid #e5e5e5; padding: 15px; border-radius: 4px; margin: 20px 0; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🔐 Password Reset</h1>
+        </div>
+        <div class="content">
+          <p>Hello ${firstName},</p>
+          <p>We received a request to reset your password for your ${systemName} account.</p>
+
+          <div class="reset-box">
+            <p>Click the button below to reset your password:</p>
+            <a href="${resetUrl}" class="button">Reset Password</a>
+            <p style="font-size: 12px; color: #666; margin-top: 20px;">
+              This link will expire in 1 hour for security reasons.
+            </p>
+          </div>
+
+          <div class="warning">
+            <strong>⚠️ Security Notice:</strong>
+            <p style="margin: 8px 0 0 0;">If you didn't request this password reset, please ignore this email. Your password will remain unchanged.</p>
+          </div>
+
+          <p>If the button doesn't work, copy and paste this link into your browser:</p>
+          <p style="word-break: break-all; color: #666; font-size: 12px;">${resetUrl}</p>
+
+          <p>Best regards,<br>${systemName} Team</p>
+        </div>
+        <div class="footer">
+          <p>© ${new Date().getFullYear()} ${systemName}. All rights reserved.</p>
+          <p>This is an automated message, please do not reply directly to this email.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
   return sendEmail(email, subject, html);
 };
 
@@ -313,18 +374,18 @@ const sendPaymentConfirmation = async (patientEmail, paymentDetails) => {
     <html>
     <head>
       <style>
-        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 0; }
-        .header { background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 30px 20px; text-align: center; }
-        .header h1 { margin: 0; font-size: 28px; }
-        .content { background: #f9f9f9; padding: 30px 20px; }
-        .payment-box { background: white; padding: 20px; border-radius: 8px; margin: 20px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1); border-left: 4px solid #10b981; }
-        .detail-row { padding: 12px 0; border-bottom: 1px solid #eee; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 20px auto; background: white; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: #1a1a1a; }
+        .content { padding: 30px 20px; }
+        .payment-box { padding: 20px; border: 2px solid #1a1a1a; border-radius: 4px; margin: 20px 0; }
+        .detail-row { padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
         .detail-row:last-child { border-bottom: none; }
-        .detail-row strong { display: inline-block; min-width: 120px; color: #10b981; }
-        .amount { font-size: 24px; font-weight: bold; color: #10b981; }
-        .button { display: inline-block; background: #10b981; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; background: #f0f0f0; }
+        .detail-row strong { display: inline-block; min-width: 120px; color: #1a1a1a; font-weight: 600; }
+        .amount { font-size: 20px; font-weight: 600; color: #1a1a1a; }
+        .button { display: inline-block; background: #1a1a1a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 20px 0; font-size: 14px; font-weight: 500; }
+        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
       </style>
     </head>
     <body>
@@ -382,6 +443,7 @@ module.exports = {
   sendAppointmentConfirmation,
   sendStatusAlert,
   sendPasswordChangeNotification,
+  sendPasswordResetEmail,
   sendCaregiverRegistrationNotification,
   sendCaregiverApprovalNotification,
   sendPaymentConfirmation
