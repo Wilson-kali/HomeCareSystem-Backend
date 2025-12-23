@@ -1,16 +1,17 @@
 const axios = require('axios');
 const crypto = require('crypto');
-const { PaymentTransaction, Appointment, Caregiver, User, TimeSlot } = require('../models');
+const { PaymentTransaction, PendingPaymentTransaction, Appointment, Caregiver, User, TimeSlot, PendingBooking, sequelize } = require('../models');
 const { PAYMENT_STATUS } = require('../utils/constants');
 const paymentConfig = require('../config/payment');
 const logger = require('../utils/logger');
-const { sendPaymentConfirmation } = require('./emailService');
+const { sendPaymentConfirmation, sendPaymentFailureNotification } = require('./emailService');
+const bookingService = require('./bookingService');
 
 /**
  * Initialize Paychangu Payment for Booking
  * Creates a payment request without existing appointment
  */
-const initiateBookingPayment = async (bookingData, customerDetails) => {
+const initiateBookingPayment = async (bookingData, customerDetails, pendingBookingId) => {
   try {
     const { timeSlotId, specialtyId, sessionType, notes, patientId, caregiverId } = bookingData;
     
@@ -69,13 +70,14 @@ const initiateBookingPayment = async (bookingData, customerDetails) => {
       }
     );
 
-    // Create payment transaction record with booking data
-    const transaction = await PaymentTransaction.create({
-      appointmentId: null, // Will be set after appointment creation
+    // Create pending payment transaction record
+    const pendingTransaction = await PendingPaymentTransaction.create({
+      pendingBookingId: pendingBookingId,
       amount: paymentAmount,
       currency: paymentConfig.paychangu.currency,
       paymentMethod: 'paychangu',
-      stripePaymentIntentId: tx_ref, // Reusing field for tx_ref
+      paymentType: paymentType,
+      tx_ref: tx_ref,
       status: PAYMENT_STATUS.PENDING,
       metadata: {
         checkout_url: response.data.data?.checkout_url,
@@ -104,7 +106,7 @@ const initiateBookingPayment = async (bookingData, customerDetails) => {
     });
 
     return {
-      transaction,
+      transaction: pendingTransaction,
       checkoutUrl: response.data.data.checkout_url,
       tx_ref: response.data.data.data.tx_ref,
       status: response.data.status
@@ -155,9 +157,11 @@ const verifyPayment = async (tx_ref) => {
 
 /**
  * Process Webhook from Paychangu
- * Validate and update payment status
+ * Validate and update payment status with pending booking integration
  */
 const processWebhook = async (webhookData, signature) => {
+  const t = await sequelize.transaction();
+
   try {
     // Verify webhook signature
     const isValid = verifyWebhookSignature(webhookData, signature);
@@ -167,227 +171,212 @@ const processWebhook = async (webhookData, signature) => {
 
     const { tx_ref, status, amount } = webhookData;
 
-    // Find transaction by tx_ref
-    const transaction = await PaymentTransaction.findOne({
-      where: { stripePaymentIntentId: tx_ref }
+    // Find pending payment transaction by tx_ref
+    const pendingTransaction = await PendingPaymentTransaction.findOne({
+      where: { tx_ref: tx_ref },
+      transaction: t
     });
 
-    if (!transaction) {
-      logger.warn(`Transaction not found for tx_ref: ${tx_ref}`);
+    if (!pendingTransaction) {
+      logger.warn(`Pending transaction not found for tx_ref: ${tx_ref}`);
+      await t.rollback();
       return null;
     }
 
-    // Update transaction status
+    // Check if already processed (idempotency)
+    if (pendingTransaction.status === PAYMENT_STATUS.COMPLETED) {
+      logger.info(`Payment ${tx_ref} already processed, skipping`);
+      await t.commit();
+      return pendingTransaction;
+    }
+
+    // Update pending transaction status
     let newStatus = PAYMENT_STATUS.PENDING;
     if (status === 'successful' || status === 'success') {
       newStatus = PAYMENT_STATUS.COMPLETED;
-      transaction.paidAt = new Date();
+      pendingTransaction.paidAt = new Date();
     } else if (status === 'failed') {
       newStatus = PAYMENT_STATUS.FAILED;
     }
 
-    transaction.status = newStatus;
-    await transaction.save();
+    pendingTransaction.status = newStatus;
+    await pendingTransaction.save({ transaction: t });
 
-    // Create appointment and update payment status when payment is successful
+    // Handle successful payment
     if (newStatus === PAYMENT_STATUS.COMPLETED) {
       let appointment;
-      
-      // If appointment doesn't exist yet, create it from booking data
-      if (!transaction.appointmentId && transaction.metadata?.bookingData) {
-        const bookingData = transaction.metadata.bookingData;
-        const { TimeSlot, Patient } = require('../models');
-        
-        // Get time slot details
-        const timeSlot = await TimeSlot.findByPk(bookingData.timeSlotId);
-        if (!timeSlot) {
-          throw new Error('Time slot not found');
-        }
-        
-        // Create appointment with booking fee already paid
-        const { APPOINTMENT_STATUS } = require('../utils/constants');
-        appointment = await Appointment.create({
-          patientId: bookingData.patientId,
-          caregiverId: bookingData.caregiverId,
-          specialtyId: bookingData.specialtyId,
-          scheduledDate: new Date(`${timeSlot.date} ${timeSlot.startTime}`),
-          duration: timeSlot.duration,
-          sessionType: bookingData.sessionType,
-          notes: bookingData.notes,
-          bookingFee: bookingData.bookingFee,
-          sessionFee: bookingData.sessionFee,
-          totalCost: parseFloat(bookingData.bookingFee) + parseFloat(bookingData.sessionFee),
-          timeSlotId: bookingData.timeSlotId,
-          status: APPOINTMENT_STATUS.SESSION_WAITING,
-          bookingFeeStatus: PAYMENT_STATUS.COMPLETED,
-          sessionFeeStatus: PAYMENT_STATUS.PENDING,
-          paymentStatus: PAYMENT_STATUS.PARTIAL,
-          bookedAt: new Date()
-        });
-        
-        // Update transaction with appointment ID
-        transaction.appointmentId = appointment.id;
-        await transaction.save();
-        
-        // Mark time slot as booked
-        await timeSlot.update({
-          status: 'booked',
-          isBooked: true,
+
+      // Find pending booking by tx_ref
+      const pendingBooking = await PendingBooking.findOne({
+        where: { tx_ref: tx_ref },
+        transaction: t
+      });
+
+      if (pendingBooking) {
+        // Convert pending booking to appointment
+        const { appointment: newAppointment } = await bookingService.convertPendingBookingToAppointment(
+          pendingBooking.id,
+          tx_ref,
+          t
+        );
+
+        appointment = newAppointment;
+
+        // Transfer pending payment to actual PaymentTransaction table
+        const actualTransaction = await PaymentTransaction.create({
           appointmentId: appointment.id,
-          lockedUntil: null
-        });
-        
-        logger.info(`Appointment created from payment: ${appointment.id}`);
+          amount: pendingTransaction.amount,
+          currency: pendingTransaction.currency,
+          paymentMethod: pendingTransaction.paymentMethod,
+          paymentType: pendingTransaction.paymentType,
+          stripePaymentIntentId: pendingTransaction.tx_ref,
+          status: PAYMENT_STATUS.COMPLETED,
+          paidAt: pendingTransaction.paidAt,
+          metadata: pendingTransaction.metadata
+        }, { transaction: t });
+
+        // Mark pending transaction as converted
+        await pendingTransaction.update({
+          convertedToPaymentId: actualTransaction.id
+        }, { transaction: t });
+
+        logger.info(`Pending payment ${pendingTransaction.id} converted to payment ${actualTransaction.id}`);
       } else {
-        // Existing appointment - update payment status based on payment type
-        const { APPOINTMENT_STATUS } = require('../utils/constants');
-        appointment = await Appointment.findByPk(transaction.appointmentId);
-        if (appointment) {
-          // Determine payment type based on appointment status and existing payments
-          let paymentType = transaction.paymentType || transaction.metadata?.paymentType;
-          
-          // If no explicit payment type and appointment exists with booking fee already paid, this is session fee
-          if (!paymentType && appointment.bookingFeeStatus === PAYMENT_STATUS.COMPLETED) {
-            paymentType = 'session_fee';
-          } else if (!paymentType) {
-            paymentType = 'booking_fee';
-          }
-          
-          if (paymentType === 'session_fee') {
-            // Determine overall payment status based on booking fee status
-            let overallPaymentStatus = 'completed';
-            let appointmentStatus = 'session_attended';
-            
-            if (appointment.bookingFeeStatus !== PAYMENT_STATUS.COMPLETED) {
-              overallPaymentStatus = 'partial';
-              appointmentStatus = 'session_waiting';
+        // Handle session fee payment for existing appointment
+        const transaction = await PaymentTransaction.findOne({
+          where: { stripePaymentIntentId: tx_ref },
+          transaction: t
+        });
+
+        if (transaction && transaction.appointmentId) {
+          // Update existing appointment payment status for session fee
+          const { APPOINTMENT_STATUS } = require('../utils/constants');
+          appointment = await Appointment.findByPk(transaction.appointmentId, { transaction: t });
+
+          if (appointment) {
+            const paymentType = transaction.paymentType || 'session_fee';
+
+            if (paymentType === 'session_fee') {
+              const overallPaymentStatus = appointment.bookingFeeStatus === PAYMENT_STATUS.COMPLETED ? 'completed' : 'partial';
+              const appointmentStatus = overallPaymentStatus === 'completed' ? 'session_attended' : 'session_waiting';
+
+              const { QueryTypes } = require('sequelize');
+              const currentTime = new Date();
+
+              await sequelize.query(
+                `UPDATE appointments SET
+                 session_fee_status = 'completed',
+                 session_paid_at = ?,
+                 paymentStatus = ?,
+                 status = ?
+                 WHERE id = ?`,
+                {
+                  replacements: [currentTime, overallPaymentStatus, appointmentStatus, appointment.id],
+                  type: QueryTypes.UPDATE,
+                  transaction: t
+                }
+              );
+
+              // Update transaction status
+              transaction.status = PAYMENT_STATUS.COMPLETED;
+              transaction.paidAt = new Date();
+              await transaction.save({ transaction: t });
+
+              logger.info(`Session fee payment completed for appointment ${appointment.id}`);
             }
-            
-            logger.info(`Updating session fee for appointment ${appointment.id}:`, {
-              sessionFeeStatus: 'completed',
-              bookingFeeStatus: appointment.bookingFeeStatus,
-              paymentStatus: overallPaymentStatus,
-              status: appointmentStatus
-            });
-            
-            // Force update session fee fields using raw SQL with exact column names
-            const { QueryTypes } = require('sequelize');
-            const sequelize = require('../config/database');
-            const currentTime = new Date();
-            
-            logger.info(`SQL Update values:`, {
-              overallPaymentStatus,
-              appointmentStatus,
-              appointmentId: appointment.id
-            });
-            
-            await sequelize.query(
-              `UPDATE Appointments SET 
-               session_fee_status = 'completed', 
-               session_paid_at = ?, 
-               paymentStatus = ?, 
-               status = ?
-               WHERE id = ?`,
-              {
-                replacements: [currentTime, overallPaymentStatus, appointmentStatus, appointment.id],
-                type: QueryTypes.UPDATE
-              }
-            );
-            
-            logger.info(`Session fee payment completed for appointment ${appointment.id}`);
-          } else {
-            // Default to booking fee
-            let overallPaymentStatus = 'partial';
-            let appointmentStatus = 'session_waiting';
-
-            if (appointment.sessionFeeStatus === PAYMENT_STATUS.COMPLETED) {
-              overallPaymentStatus = 'completed';
-              appointmentStatus = 'session_attended';
-            }
-
-            logger.info(`Updating booking fee for appointment ${appointment.id}:`, {
-              bookingFeeStatus: 'completed',
-              sessionFeeStatus: appointment.sessionFeeStatus,
-              paymentStatus: overallPaymentStatus,
-              status: appointmentStatus
-            });
-
-            // Force update booking fee fields using raw SQL with exact column names
-            const { QueryTypes } = require('sequelize');
-            const sequelize = require('../config/database');
-            const currentTime = new Date();
-
-            logger.info(`SQL Update values:`, {
-              currentTime,
-              overallPaymentStatus,
-              appointmentStatus,
-              appointmentId: appointment.id
-            });
-
-            await sequelize.query(
-              `UPDATE Appointments SET
-               booking_fee_status = 'completed',
-               bookedAt = ?,
-               paymentStatus = ?,
-               status = ?,
-               updatedAt = ?
-               WHERE id = ?`,
-              {
-                replacements: [currentTime, overallPaymentStatus, appointmentStatus, currentTime, appointment.id],
-                type: QueryTypes.UPDATE
-              }
-            );
-
-            logger.info(`Booking fee payment completed for appointment ${appointment.id}`);
           }
         }
       }
-      
+
+      // Commit transaction before sending emails
+      await t.commit();
+
+      // Send confirmation email (outside transaction)
       if (appointment) {
-        // Load full appointment data for email
-        const { Patient } = require('../models');
-        const fullAppointment = await Appointment.findByPk(appointment.id, {
-          include: [
-            { 
-              model: Caregiver,
-              include: [{ model: User }]
-            },
-            { 
-              model: Patient,
-              include: [{ model: User }]
-            },
-            { model: TimeSlot }
-          ]
-        });
-        
-        // Status is already set to session_waiting, no need to auto-confirm
-        
-        logger.info(`Booking fee payment completed: ${appointment.id}, status: ${fullAppointment.status}`);
-        
-        // Send payment confirmation email to patient
         try {
-          if (fullAppointment.Patient?.User?.email) {
+          const { Patient } = require('../models');
+          const fullAppointment = await Appointment.findByPk(appointment.id, {
+            include: [
+              { model: Caregiver, include: [{ model: User }] },
+              { model: Patient, include: [{ model: User }] },
+              { model: TimeSlot }
+            ]
+          });
+
+          if (fullAppointment?.Patient?.User?.email) {
             await sendPaymentConfirmation(fullAppointment.Patient.User.email, {
               patientName: `${fullAppointment.Patient.User.firstName} ${fullAppointment.Patient.User.lastName}`,
-              amount: transaction.amount,
+              amount: pendingTransaction.amount,
               transactionId: tx_ref,
               appointmentDate: fullAppointment.TimeSlot?.date || fullAppointment.scheduledDate,
-              caregiverName: fullAppointment.Caregiver?.User ? 
-                `${fullAppointment.Caregiver.User.firstName} ${fullAppointment.Caregiver.User.lastName}` : 
+              caregiverName: fullAppointment.Caregiver?.User ?
+                `${fullAppointment.Caregiver.User.firstName} ${fullAppointment.Caregiver.User.lastName}` :
                 'Your Caregiver'
             });
-            logger.info(`Booking fee confirmation email sent to: ${fullAppointment.Patient.User.email}`);
+            logger.info(`Payment confirmation email sent to: ${fullAppointment.Patient.User.email}`);
           }
         } catch (emailError) {
           logger.error('Failed to send payment confirmation email:', emailError);
         }
       }
+
+      return pendingTransaction;
     }
 
+    // Handle failed payment
+    if (newStatus === PAYMENT_STATUS.FAILED) {
+      // Find pending booking associated with this transaction
+      const pendingBooking = await PendingBooking.findOne({
+        where: {
+          tx_ref: tx_ref
+        },
+        transaction: t
+      });
+
+      if (pendingBooking && pendingBooking.status !== 'expired' && pendingBooking.status !== 'payment_failed') {
+        // Release pending booking and slot
+        await bookingService.releasePendingBooking(pendingBooking.id, 'payment_failed', t);
+        logger.info(`Released pending booking ${pendingBooking.id} due to payment failure`);
+      }
+
+      await t.commit();
+
+      // Send failure notification email (outside transaction)
+      if (pendingBooking) {
+        try {
+          const { Patient } = require('../models');
+          const bookingWithPatient = await PendingBooking.findByPk(pendingBooking.id, {
+            include: [{ model: Patient, include: [{ model: User }] }]
+          });
+
+          if (bookingWithPatient?.Patient?.User?.email) {
+            await sendPaymentFailureNotification(bookingWithPatient.Patient.User.email, {
+              patientName: `${bookingWithPatient.Patient.User.firstName} ${bookingWithPatient.Patient.User.lastName}`,
+              tx_ref: tx_ref,
+              amount: pendingTransaction.amount,
+              bookingId: pendingBooking.id
+            });
+
+            // Mark notification as sent
+            await bookingWithPatient.update({ notificationSent: true });
+
+            logger.info(`Payment failure notification sent to: ${bookingWithPatient.Patient.User.email}`);
+          }
+        } catch (emailError) {
+          logger.error('Failed to send payment failure notification:', emailError);
+        }
+      }
+
+      return pendingTransaction;
+    }
+
+    // For pending status, just commit
+    await t.commit();
     logger.info(`Payment webhook processed: ${tx_ref}`, { status: newStatus });
 
-    return transaction;
+    return pendingTransaction;
   } catch (error) {
+    await t.rollback();
     logger.error('Webhook processing failed:', error);
     throw error;
   }

@@ -82,9 +82,21 @@ const getAvailableSlots = async (req, res, next) => {
       limit: 100 // Prevent returning too many slots
     });
 
+    // Filter out past time slots for today
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const currentTime = now.toTimeString().split(' ')[0];
+    
+    const filteredSlots = slots.filter(slot => {
+      if (slot.date === today) {
+        return slot.startTime > currentTime;
+      }
+      return true;
+    });
+
     res.json({
-      slots,
-      count: slots.length,
+      slots: filteredSlots,
+      count: filteredSlots.length,
       filters: {
         caregiverId: caregiverId || 'all',
         date: date || `>= ${new Date().toISOString().split('T')[0]}`,

@@ -110,6 +110,42 @@ const Appointment = sequelize.define('Appointment', {
       max: 5
     },
     comment: 'Patient rating for this session (1-5 stars)'
+  },
+  rescheduleCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    field: 'reschedule_count',
+    comment: 'Number of times this appointment has been rescheduled'
+  },
+  lastRescheduledAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    field: 'last_rescheduled_at',
+    comment: 'Timestamp of last reschedule'
+  },
+  rescheduleHistory: {
+    type: DataTypes.JSON,
+    allowNull: true,
+    field: 'reschedule_history',
+    comment: 'History of reschedules with timestamps and reasons'
+  },
+  cancellationReason: {
+    type: DataTypes.TEXT,
+    allowNull: true,
+    field: 'cancellation_reason',
+    comment: 'Reason for appointment cancellation'
+  },
+  cancelledAt: {
+    type: DataTypes.DATE,
+    allowNull: true,
+    field: 'cancelled_at',
+    comment: 'Timestamp when appointment was cancelled'
+  },
+  cancelledBy: {
+    type: DataTypes.ENUM('patient', 'system'),
+    allowNull: true,
+    field: 'cancelled_by',
+    comment: 'Who cancelled the appointment'
   }
 }, {
   tableName: 'appointments'

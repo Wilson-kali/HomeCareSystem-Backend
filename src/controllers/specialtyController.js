@@ -1,4 +1,6 @@
-const { Specialty } = require('../models');
+const { Specialty, Appointment, PaymentTransaction, Caregiver, User } = require('../models');
+const { Op } = require('sequelize');
+const sequelize = require('../config/database');
 
 // Get all specialties (including inactive for admin)
 const getSpecialties = async (req, res, next) => {
@@ -13,6 +15,44 @@ const getSpecialties = async (req, res, next) => {
 
     const specialties = await Specialty.findAll({
       where: whereClause,
+      attributes: [
+        'id',
+        'name',
+        'description',
+        'sessionFee',
+        'bookingFee',
+        'isActive',
+        'createdAt',
+        'updatedAt',
+        [
+          sequelize.literal(`(
+            SELECT COUNT(*) FROM appointments a
+            WHERE a.specialtyId = Specialty.id
+            AND a.status IN ('session_attended', 'completed')
+          )`),
+          'completedAppointments'
+        ],
+        [
+          sequelize.literal(`(
+            SELECT COALESCE(
+              SUM(
+                CASE WHEN a.booking_fee_status = 'completed' THEN a.bookingFee ELSE 0 END +
+                CASE WHEN a.session_fee_status = 'completed' THEN a.sessionFee ELSE 0 END
+              ), 0
+            ) FROM appointments a
+            WHERE a.specialtyId = Specialty.id
+          )`),
+          'totalIncome'
+        ],
+        [
+          sequelize.literal(`(
+            SELECT COUNT(DISTINCT c.id) FROM caregivers c
+            JOIN caregiverspecialties cs ON c.id = cs.CaregiverId
+            WHERE cs.SpecialtyId = Specialty.id
+          )`),
+          'activeCaregiversCount'
+        ]
+      ],
       order: [['name', 'ASC']]
     });
 

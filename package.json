@@ -11,7 +11,8 @@
     "db:migrate-booking": "node src/scripts/runMigration.js",
     "db:migrate-safe": "node -e \"require('./src/scripts/safeMigration')().then(() => process.exit(0)).catch(e => {console.error(e); process.exit(1)})\"",
     "populate-locations": "node src/scripts/populateLocations.js",
-    "add-location-fields": "node src/scripts/addLocationFields.js"
+    "add-location-fields": "node src/scripts/addLocationFields.js",
+    "add-cancellation-fields": "node src/scripts/addCancellationFields.js"
   },
   "keywords": [],
   "author": "",
@@ -31,6 +32,7 @@
     "morgan": "^1.10.1",
     "multer": "^2.0.2",
     "mysql2": "^3.16.0",
+    "node-cron": "^4.2.1",
     "resend": "^3.2.0",
     "sequelize": "^6.37.7",
     "socket.io": "^4.8.1",

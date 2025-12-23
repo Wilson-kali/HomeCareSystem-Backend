@@ -49,6 +49,35 @@ const Patient = sequelize.define('Patient', {
   village: {
     type: DataTypes.STRING,
     allowNull: true
+  },
+  patientType: {
+    type: DataTypes.ENUM('adult', 'child', 'elderly'),
+    defaultValue: 'adult',
+    allowNull: false
+  },
+  guardianFirstName: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  guardianLastName: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  guardianPhone: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  guardianEmail: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  guardianRelationship: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  guardianIdNumber: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 }, {
   tableName: 'patients'

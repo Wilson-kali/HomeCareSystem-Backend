@@ -43,11 +43,26 @@ const register = async (req, res, next) => {
       isActive: role !== 'caregiver' // Caregivers need approval
     }, { transaction });
 
+    // Get the user ID from the database since Sequelize isn't returning it properly
+    const createdUser = await User.findOne({ 
+      where: { email },
+      transaction 
+    });
+    
+    console.log('User created:', { id: createdUser?.id, email: createdUser?.email });
+
+    // Ensure user was created and has an ID
+    if (!createdUser || !createdUser.id) {
+      console.error('User creation failed - no ID');
+      await transaction.rollback();
+      return res.status(500).json({ error: 'Failed to create user' });
+    }
+
     // Create role-specific profile
     switch (role) {
       case 'patient':
-        await Patient.create({
-          userId: user.id,
+        const patientData = {
+          userId: parseInt(createdUser.id),
           dateOfBirth: roleSpecificData.dateOfBirth,
           address: roleSpecificData.address,
           emergencyContact: roleSpecificData.emergencyContact,
@@ -57,8 +72,19 @@ const register = async (req, res, next) => {
           region: roleSpecificData.region,
           district: roleSpecificData.district,
           traditionalAuthority: roleSpecificData.traditionalAuthority,
-          village: roleSpecificData.village
-        }, { transaction });
+          village: roleSpecificData.village,
+          patientType: roleSpecificData.patientType === 'child_patient' ? 'child' : 
+                      roleSpecificData.patientType === 'elderly_patient' ? 'elderly' : 'adult',
+          guardianFirstName: roleSpecificData.guardianFirstName,
+          guardianLastName: roleSpecificData.guardianLastName,
+          guardianPhone: roleSpecificData.guardianPhone,
+          guardianEmail: roleSpecificData.guardianEmail,
+          guardianRelationship: roleSpecificData.guardianRelationship,
+          guardianIdNumber: roleSpecificData.guardianIdNumber
+        };
+        
+        console.log('Creating patient with userId:', patientData.userId);
+        await Patient.create(patientData, { transaction });
         break;
       case 'caregiver':
         // Handle document uploads for caregivers
@@ -81,7 +107,7 @@ const register = async (req, res, next) => {
         }
         
         const caregiver = await Caregiver.create({
-          userId: user.id,
+          userId: createdUser.id,
           licensingInstitution: roleSpecificData.licensingInstitution,
           licenseNumber: roleSpecificData.licenseNumber || `TEMP-${Date.now()}`,
           experience: roleSpecificData.experience || 0,
@@ -96,15 +122,20 @@ const register = async (req, res, next) => {
           village: roleSpecificData.village
         }, { transaction });
         
-        // Handle specialties
-        if (roleSpecificData.specialties && Array.isArray(roleSpecificData.specialties)) {
+        // Handle specialties - get the created caregiver with ID
+        const createdCaregiver = await Caregiver.findOne({
+          where: { userId: createdUser.id },
+          transaction
+        });
+        
+        if (roleSpecificData.specialties && Array.isArray(roleSpecificData.specialties) && createdCaregiver) {
           const specialtyIds = roleSpecificData.specialties.map(id => parseInt(id));
-          await caregiver.setSpecialties(specialtyIds, { transaction });
+          await createdCaregiver.setSpecialties(specialtyIds, { transaction });
         }
         break;
       case 'primary_physician':
         await PrimaryPhysician.create({
-          userId: user.id,
+          userId: createdUser.id,
           ...roleSpecificData
         }, { transaction });
         break;
@@ -117,7 +148,7 @@ const register = async (req, res, next) => {
       // Send email notification to caregiver
       try {
         const emailService = require('../services/emailService');
-        await emailService.sendCaregiverRegistrationNotification(user.email, user.firstName);
+        await emailService.sendCaregiverRegistrationNotification(createdUser.email, createdUser.firstName);
       } catch (emailError) {
         console.error('Failed to send registration email:', emailError);
       }
@@ -127,15 +158,30 @@ const register = async (req, res, next) => {
         requiresApproval: true
       });
     } else {
-      const token = generateToken(user.id);
+      const token = generateToken(createdUser.id);
       res.status(201).json({
         message: 'Registration successful',
         token,
-        user: sanitizeUser(user)
+        user: sanitizeUser(createdUser)
       });
     }
   } catch (error) {
+    console.error('Registration error details:', {
+      message: error.message,
+      stack: error.stack,
+      name: error.name,
+      sql: error.sql,
+      parameters: error.parameters
+    });
     await transaction.rollback();
+    
+    if (error.name === 'SequelizeValidationError') {
+      return res.status(400).json({ 
+        error: 'Validation error', 
+        details: error.errors.map(e => ({ field: e.path, message: e.message }))
+      });
+    }
+    
     next(error);
   }
 };

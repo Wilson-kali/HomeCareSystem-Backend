@@ -17,6 +17,8 @@ const UserSettings = require('./UserSettings');
 const TimeSlot = require('./TimeSlot');
 const CaregiverAvailability = require('./CaregiverAvailability');
 const Location = require('./Location');
+const PendingBooking = require('./PendingBooking');
+const PendingPaymentTransaction = require('./PendingPaymentTransaction');
 
 // Define associations
 // User-Role association
@@ -92,6 +94,32 @@ TimeSlot.hasOne(Appointment, { foreignKey: 'timeSlotId' });
 Caregiver.hasMany(CaregiverAvailability, { foreignKey: 'caregiverId' });
 CaregiverAvailability.belongsTo(Caregiver, { foreignKey: 'caregiverId' });
 
+// PendingBooking associations
+Patient.hasMany(PendingBooking, { foreignKey: 'patientId' });
+PendingBooking.belongsTo(Patient, { foreignKey: 'patientId' });
+
+Caregiver.hasMany(PendingBooking, { foreignKey: 'caregiverId' });
+PendingBooking.belongsTo(Caregiver, { foreignKey: 'caregiverId' });
+
+Specialty.hasMany(PendingBooking, { foreignKey: 'specialtyId' });
+PendingBooking.belongsTo(Specialty, { foreignKey: 'specialtyId' });
+
+TimeSlot.hasMany(PendingBooking, { foreignKey: 'timeSlotId' });
+PendingBooking.belongsTo(TimeSlot, { foreignKey: 'timeSlotId' });
+
+Location.hasMany(PendingBooking, { foreignKey: 'locationId' });
+PendingBooking.belongsTo(Location, { foreignKey: 'locationId' });
+
+Appointment.hasMany(PendingBooking, { foreignKey: 'convertedToAppointmentId' });
+PendingBooking.belongsTo(Appointment, { foreignKey: 'convertedToAppointmentId', as: 'ConvertedAppointment' });
+
+// PendingPaymentTransaction associations
+PendingBooking.hasMany(PendingPaymentTransaction, { foreignKey: 'pendingBookingId' });
+PendingPaymentTransaction.belongsTo(PendingBooking, { foreignKey: 'pendingBookingId' });
+
+PaymentTransaction.hasMany(PendingPaymentTransaction, { foreignKey: 'convertedToPaymentId' });
+PendingPaymentTransaction.belongsTo(PaymentTransaction, { foreignKey: 'convertedToPaymentId', as: 'ConvertedPayment' });
+
 module.exports = {
   sequelize,
   User,
@@ -111,5 +139,7 @@ module.exports = {
   UserSettings,
   TimeSlot,
   CaregiverAvailability,
-  Location
+  Location,
+  PendingBooking,
+  PendingPaymentTransaction
 };

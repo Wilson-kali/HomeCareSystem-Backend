@@ -8,7 +8,10 @@ const {
   confirmPayment,
   paySessionFee,
   submitPatientFeedback,
-  markAppointmentCompleted
+  markAppointmentCompleted,
+  rescheduleAppointment,
+  cancelAppointment,
+  autoCleanupDueBookings
 } = require('../controllers/appointmentController');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const { handleValidationErrors } = require('../middleware/validator.middleware');
@@ -58,5 +61,15 @@ router.post('/confirm-payment', confirmPayment);
 router.post('/pay-session-fee', paySessionFee);
 router.post('/submit-feedback', submitPatientFeedback);
 router.patch('/:id/complete', markAppointmentCompleted);
+router.post('/:id/reschedule', [
+  body('newTimeSlotId').isInt(),
+  body('reason').optional().isString()
+], handleValidationErrors, rescheduleAppointment);
+
+router.post('/:id/cancel', [
+  body('reason').optional().isString()
+], handleValidationErrors, cancelAppointment);
+
+router.post('/cleanup-due-bookings', autoCleanupDueBookings);
 
 module.exports = router;

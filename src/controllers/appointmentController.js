@@ -2,8 +2,35 @@ const { Appointment, Patient, Caregiver, User, Specialty, TimeSlot } = require('
 const { APPOINTMENT_STATUS, USER_ROLES, TIMESLOT_STATUS, PAYMENT_STATUS } = require('../utils/constants');
 const { sendAppointmentConfirmation } = require('../services/emailService');
 
+/**
+ * @deprecated This endpoint is deprecated and should not be used for new bookings
+ * Use POST /api/payments/initiate-booking instead for race-condition-free booking
+ *
+ * This function creates appointments directly without payment integration and
+ * doesn't use transaction-based slot locking, making it vulnerable to race conditions.
+ *
+ * The new flow:
+ * 1. POST /api/payments/initiate-booking - Locks slot, creates pending booking, initiates payment
+ * 2. Payment webhook automatically creates appointment on successful payment
+ * 3. Automatic cleanup releases expired slots after 10 minutes
+ */
 const createAppointment = async (req, res, next) => {
   try {
+    // Return deprecation warning
+    return res.status(410).json({
+      error: 'This endpoint is deprecated',
+      message: 'Please use POST /api/payments/initiate-booking for creating new bookings',
+      documentation: {
+        newEndpoint: '/api/payments/initiate-booking',
+        method: 'POST',
+        requiredFields: ['timeSlotId', 'specialtyId'],
+        optionalFields: ['sessionType', 'notes', 'phoneNumber', 'locationId'],
+        description: 'Initiates booking with payment and automatic appointment creation on payment success'
+      },
+      reason: 'The new booking flow prevents race conditions and includes automatic cleanup of expired bookings'
+    });
+
+    /* LEGACY CODE - PRESERVED FOR REFERENCE
     const { timeSlotId, specialtyId, sessionType, notes } = req.body;
 
     // Get patient ID from authenticated user
@@ -48,7 +75,7 @@ const createAppointment = async (req, res, next) => {
       timeSlotId,
       bookingFeeStatus: PAYMENT_STATUS.PENDING,
       sessionFeeStatus: PAYMENT_STATUS.PENDING,
-      paymentStatus: PAYMENT_STATUS.PENDING, // Overall status
+      paymentStatus: PAYMENT_STATUS.PENDING,
       bookedAt: new Date()
     });
 
@@ -69,6 +96,7 @@ const createAppointment = async (req, res, next) => {
         totalCost
       }
     });
+    */
   } catch (error) {
     next(error);
   }
@@ -331,6 +359,362 @@ const markAppointmentCompleted = async (req, res, next) => {
   }
 };
 
+const rescheduleAppointment = async (req, res, next) => {
+  const transaction = await Appointment.sequelize.transaction();
+  
+  try {
+    const { id } = req.params;
+    const { newTimeSlotId, reason, rescheduleBy = 'patient' } = req.body;
+    
+    const cutoffHours = parseInt(process.env.RESCHEDULE_CUTOFF_HOURS) || 12;
+    const maxReschedules = parseInt(process.env.MAX_RESCHEDULES_PER_APPOINTMENT) || 2;
+
+    // Find appointment with related data
+    const appointment = await Appointment.findByPk(id, {
+      include: [
+        { model: Patient, include: [{ model: User }] },
+        { model: Caregiver, include: [{ model: User }] },
+        { model: TimeSlot }
+      ],
+      transaction
+    });
+
+    if (!appointment) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Verify user authorization
+    let isAuthorized = false;
+    if (req.user.role === 'patient') {
+      const patient = await Patient.findOne({ where: { userId: req.user.id } });
+      isAuthorized = patient && appointment.patientId === patient.id;
+    } else if (req.user.role === 'caregiver') {
+      const caregiver = await Caregiver.findOne({ where: { userId: req.user.id } });
+      isAuthorized = caregiver && appointment.caregiverId === caregiver.id;
+    }
+
+    if (!isAuthorized) {
+      await transaction.rollback();
+      return res.status(403).json({ error: 'Not authorized to reschedule this appointment' });
+    }
+
+    // Validate appointment status
+    if (appointment.status !== 'session_waiting') {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Only confirmed appointments can be rescheduled' });
+    }
+
+    // Check reschedule count limit
+    if (appointment.rescheduleCount >= maxReschedules) {
+      await transaction.rollback();
+      return res.status(400).json({ 
+        error: `Maximum reschedules exceeded (${maxReschedules} allowed)` 
+      });
+    }
+
+    // Check time cutoff
+    const hoursUntilAppointment = (new Date(appointment.scheduledDate) - new Date()) / (1000 * 60 * 60);
+    if (hoursUntilAppointment < cutoffHours) {
+      await transaction.rollback();
+      return res.status(400).json({ 
+        error: `Cannot reschedule within ${cutoffHours} hours of appointment` 
+      });
+    }
+
+    // Verify new time slot
+    const newTimeSlot = await TimeSlot.findByPk(newTimeSlotId, { transaction });
+    if (!newTimeSlot) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'New time slot not found' });
+    }
+
+    if (newTimeSlot.caregiverId !== appointment.caregiverId) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Can only reschedule to slots from the same caregiver' });
+    }
+
+    if (newTimeSlot.status !== 'available') {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'New time slot is not available' });
+    }
+
+    // Check if new slot is in the future
+    const newSlotDateTime = new Date(`${newTimeSlot.date} ${newTimeSlot.startTime}`);
+    if (newSlotDateTime <= new Date()) {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Cannot reschedule to a past date/time' });
+    }
+
+    // Release old time slot
+    if (appointment.TimeSlot) {
+      await appointment.TimeSlot.update({
+        status: 'available',
+        isBooked: false,
+        appointmentId: null
+      }, { transaction });
+    }
+
+    // Book new time slot
+    await newTimeSlot.update({
+      status: 'booked',
+      isBooked: true,
+      appointmentId: appointment.id
+    }, { transaction });
+
+    // Update reschedule history
+    const rescheduleHistory = appointment.rescheduleHistory || [];
+    rescheduleHistory.push({
+      from: {
+        date: appointment.TimeSlot?.date,
+        startTime: appointment.TimeSlot?.startTime,
+        endTime: appointment.TimeSlot?.endTime
+      },
+      to: {
+        date: newTimeSlot.date,
+        startTime: newTimeSlot.startTime,
+        endTime: newTimeSlot.endTime
+      },
+      rescheduleBy,
+      reason,
+      timestamp: new Date()
+    });
+
+    // Update appointment
+    await appointment.update({
+      timeSlotId: newTimeSlotId,
+      scheduledDate: new Date(`${newTimeSlot.date} ${newTimeSlot.startTime}`),
+      rescheduleCount: appointment.rescheduleCount + 1,
+      lastRescheduledAt: new Date(),
+      rescheduleHistory
+    }, { transaction });
+
+    await transaction.commit();
+
+    // Send email notifications to both parties
+    try {
+      const emailService = require('../services/emailService');
+      const patientEmail = appointment.Patient.User.email;
+      const caregiverEmail = appointment.Caregiver.User.email;
+      const newDateTime = `${new Date(newTimeSlot.date).toLocaleDateString()} at ${newTimeSlot.startTime}`;
+      
+      // Send email to patient
+      await emailService.sendRescheduleNotification(
+        patientEmail,
+        appointment.Patient.User.firstName,
+        rescheduleBy,
+        rescheduleBy === 'patient' ? `${appointment.Patient.User.firstName} ${appointment.Patient.User.lastName}` : `${appointment.Caregiver.User.firstName} ${appointment.Caregiver.User.lastName}`,
+        newDateTime
+      );
+      
+      // Send email to caregiver
+      await emailService.sendRescheduleNotification(
+        caregiverEmail,
+        appointment.Caregiver.User.firstName,
+        rescheduleBy,
+        rescheduleBy === 'patient' ? `${appointment.Patient.User.firstName} ${appointment.Patient.User.lastName}` : `${appointment.Caregiver.User.firstName} ${appointment.Caregiver.User.lastName}`,
+        newDateTime
+      );
+    } catch (emailError) {
+      console.error('Failed to send reschedule notification:', emailError);
+    }
+
+    // Return updated appointment
+    const updatedAppointment = await Appointment.findByPk(id, {
+      include: [
+        { model: Patient, include: [{ model: User }] },
+        { model: Caregiver, include: [{ model: User }] },
+        { model: Specialty },
+        { model: TimeSlot }
+      ]
+    });
+
+    res.json({
+      success: true,
+      message: 'Appointment rescheduled successfully',
+      appointment: updatedAppointment
+    });
+  } catch (error) {
+    await transaction.rollback();
+    next(error);
+  }
+};
+
+const cancelAppointment = async (req, res, next) => {
+  const transaction = await Appointment.sequelize.transaction();
+  
+  try {
+    const { id } = req.params;
+    const { reason } = req.body;
+    
+    const cutoffHours = parseInt(process.env.CANCELLATION_CUTOFF_HOURS) || 16;
+
+    // Find appointment with related data
+    const appointment = await Appointment.findByPk(id, {
+      include: [
+        { model: Patient, include: [{ model: User }] },
+        { model: Caregiver, include: [{ model: User }] },
+        { model: TimeSlot }
+      ],
+      transaction
+    });
+
+    if (!appointment) {
+      await transaction.rollback();
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Only patients can cancel appointments
+    const patient = await Patient.findOne({ where: { userId: req.user.id } });
+    if (!patient || appointment.patientId !== patient.id) {
+      await transaction.rollback();
+      return res.status(403).json({ error: 'Only patients can cancel their own appointments' });
+    }
+
+    // Check if appointment is already cancelled
+    if (appointment.status === 'cancelled') {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Appointment is already cancelled' });
+    }
+
+    // Check if appointment is completed
+    if (appointment.status === 'completed') {
+      await transaction.rollback();
+      return res.status(400).json({ error: 'Cannot cancel completed appointments' });
+    }
+
+    // Check time cutoff (16 hours before appointment)
+    const hoursUntilAppointment = (new Date(appointment.scheduledDate) - new Date()) / (1000 * 60 * 60);
+    if (hoursUntilAppointment < cutoffHours) {
+      await transaction.rollback();
+      return res.status(400).json({ 
+        error: `Cannot cancel within ${cutoffHours} hours of appointment` 
+      });
+    }
+
+    // Release time slot
+    if (appointment.TimeSlot) {
+      await appointment.TimeSlot.update({
+        status: 'available',
+        isBooked: false,
+        appointmentId: null
+      }, { transaction });
+    }
+
+    // Update appointment
+    await appointment.update({
+      status: 'cancelled',
+      cancellationReason: reason,
+      cancelledAt: new Date(),
+      cancelledBy: 'patient'
+    }, { transaction });
+
+    await transaction.commit();
+
+    // Send email notifications
+    try {
+      const emailService = require('../services/emailService');
+      const patientEmail = appointment.Patient.User.email;
+      const caregiverEmail = appointment.Caregiver.User.email;
+      const appointmentDateTime = `${new Date(appointment.scheduledDate).toLocaleDateString()} at ${appointment.TimeSlot?.startTime}`;
+      
+      // Send cancellation notification to both parties
+      await emailService.sendCancellationNotification(
+        patientEmail,
+        appointment.Patient.User.firstName,
+        appointmentDateTime,
+        reason
+      );
+      
+      await emailService.sendCancellationNotification(
+        caregiverEmail,
+        appointment.Caregiver.User.firstName,
+        appointmentDateTime,
+        reason
+      );
+    } catch (emailError) {
+      console.error('Failed to send cancellation notification:', emailError);
+    }
+
+    // Return updated appointment
+    const updatedAppointment = await Appointment.findByPk(id, {
+      include: [
+        { model: Patient, include: [{ model: User }] },
+        { model: Caregiver, include: [{ model: User }] },
+        { model: Specialty },
+        { model: TimeSlot }
+      ]
+    });
+
+    res.json({
+      success: true,
+      message: 'Appointment cancelled successfully',
+      appointment: updatedAppointment
+    });
+  } catch (error) {
+    await transaction.rollback();
+    next(error);
+  }
+};
+
+const autoCleanupDueBookings = async (req, res, next) => {
+  try {
+    const cleanupHours = parseInt(process.env.AUTO_CLEANUP_DUE_HOURS) || 30;
+    const cutoffTime = new Date(Date.now() - (cleanupHours * 60 * 60 * 1000));
+
+    // Find appointments that are 30+ hours past their scheduled end time
+    const dueAppointments = await Appointment.findAll({
+      where: {
+        status: ['scheduled', 'confirmed', 'session_waiting'],
+        scheduledDate: {
+          [require('sequelize').Op.lt]: cutoffTime
+        }
+      },
+      include: [{ model: TimeSlot }]
+    });
+
+    let cleanedCount = 0;
+    
+    for (const appointment of dueAppointments) {
+      const transaction = await Appointment.sequelize.transaction();
+      
+      try {
+        // Release time slot
+        if (appointment.TimeSlot) {
+          await appointment.TimeSlot.update({
+            status: 'available',
+            isBooked: false,
+            appointmentId: null
+          }, { transaction });
+        }
+
+        // Cancel appointment
+        await appointment.update({
+          status: 'cancelled',
+          cancellationReason: 'Automatically cancelled - appointment overdue',
+          cancelledAt: new Date(),
+          cancelledBy: 'system'
+        }, { transaction });
+
+        await transaction.commit();
+        cleanedCount++;
+      } catch (error) {
+        await transaction.rollback();
+        console.error(`Failed to cleanup appointment ${appointment.id}:`, error);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Cleaned up ${cleanedCount} overdue appointments`,
+      cleanedCount,
+      totalFound: dueAppointments.length
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createAppointment,
   getAppointments,
@@ -339,5 +723,8 @@ module.exports = {
   confirmPayment,
   paySessionFee,
   submitPatientFeedback,
-  markAppointmentCompleted
+  markAppointmentCompleted,
+  rescheduleAppointment,
+  cancelAppointment,
+  autoCleanupDueBookings
 };

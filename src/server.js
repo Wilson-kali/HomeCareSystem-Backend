@@ -12,6 +12,7 @@ const db = require('./models');
 const routes = require('./routes');
 const { errorHandler } = require('./middleware/errorHandler.middleware');
 const logger = require('./utils/logger');
+const cleanupService = require('./services/cleanupService');
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, '..', 'uploads');
@@ -67,17 +68,63 @@ async function startServer() {
     // Test database connection
     await db.sequelize.authenticate();
     logger.info('✅ Database connection established');
-    
+
+    // Start cleanup service for expired bookings and locked slots
+    cleanupService.startCleanupJob();
+    logger.info('🧹 Cleanup service started (expired bookings: every 5 minutes, overdue appointments: every hour)');
+
     // Start server
     server.listen(PORT, () => {
       logger.info(`🚀 Server running on port ${PORT}`);
       logger.info('📊 Database connection ready');
+      logger.info('⏱  Automatic cleanup enabled for expired bookings');
     });
   } catch (error) {
     logger.error('❌ Failed to start server:', error);
     process.exit(1);
   }
 }
+
+// Graceful shutdown
+const shutdown = async (signal) => {
+  logger.info(`\n${signal} received, starting graceful shutdown...`);
+
+  try {
+    // Stop cleanup service
+    cleanupService.stopCleanupJob();
+    logger.info('🛑 Cleanup service stopped');
+
+    // Close server
+    server.close(() => {
+      logger.info('🔌 Server closed');
+    });
+
+    // Close database connection
+    await db.sequelize.close();
+    logger.info('🔌 Database connection closed');
+
+    logger.info('✅ Graceful shutdown completed');
+    process.exit(0);
+  } catch (error) {
+    logger.error('❌ Error during shutdown:', error);
+    process.exit(1);
+  }
+};
+
+// Handle shutdown signals
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  logger.error('💥 Uncaught Exception:', error);
+  shutdown('UNCAUGHT_EXCEPTION');
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  logger.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+  shutdown('UNHANDLED_REJECTION');
+});
 
 startServer();
 

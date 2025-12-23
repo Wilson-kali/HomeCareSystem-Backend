@@ -415,14 +415,27 @@ router.get('/caregivers/:caregiverId/transactions', async (req, res, next) => {
 
 router.put('/users/:userId/toggle-status', async (req, res, next) => {
   try {
-    const { User } = require('../models');
-    const user = await User.findByPk(req.params.userId);
+    const { User, Role } = require('../models');
+    const user = await User.findByPk(req.params.userId, {
+      include: [{ model: Role }]
+    });
     
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
     
+    const wasInactive = !user.isActive;
     await user.update({ isActive: !user.isActive });
+    
+    // Send approval email if caregiver is being activated
+    if (wasInactive && user.isActive && user.Role?.name === 'caregiver') {
+      try {
+        const emailService = require('../services/emailService');
+        await emailService.sendCaregiverApprovalNotification(user.email, user.firstName);
+      } catch (emailError) {
+        console.error('Failed to send activation email:', emailError);
+      }
+    }
     
     res.json({ 
       message: `User ${user.isActive ? 'activated' : 'deactivated'} successfully`,

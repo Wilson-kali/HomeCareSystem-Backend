@@ -6,15 +6,24 @@ const {
   getPaymentByTxRef,
   getAppointmentPayments
 } = require('../services/paymentService');
-const { User, Patient, TimeSlot } = require('../models');
+const bookingService = require('../services/bookingService');
+const { User, Patient, TimeSlot, Location } = require('../models');
 
 /**
- * Initiate Booking Payment (creates appointment after successful payment)
+ * Initiate Booking Payment with Race Condition Prevention
+ * Uses pending bookings and database transactions for atomic slot locking
  * POST /api/payments/initiate-booking
  */
 const initiateBookingPaymentEndpoint = async (req, res, next) => {
   try {
-    const { timeSlotId, specialtyId, sessionType, notes, phoneNumber } = req.body;
+    const { timeSlotId, specialtyId, sessionType, notes, phoneNumber, locationId } = req.body;
+
+    // Validate required fields
+    if (!timeSlotId || !specialtyId) {
+      return res.status(400).json({
+        error: 'Missing required fields: timeSlotId and specialtyId are required'
+      });
+    }
 
     // Get patient details
     const patient = await Patient.findOne({
@@ -26,20 +35,33 @@ const initiateBookingPaymentEndpoint = async (req, res, next) => {
       return res.status(404).json({ error: 'Patient profile not found' });
     }
 
-    // Verify time slot is available and lock it
+    // Get time slot to retrieve caregiver ID
     const timeSlot = await TimeSlot.findByPk(timeSlotId);
-    if (!timeSlot || timeSlot.status !== 'available') {
-      return res.status(400).json({ error: 'Time slot not available' });
+    if (!timeSlot) {
+      return res.status(404).json({ error: 'Time slot not found' });
     }
 
-    // Lock the time slot
-    const lockDuration = 10; // 10 minutes
-    const lockedUntil = new Date(Date.now() + lockDuration * 60000);
-    await timeSlot.update({
-      status: 'locked',
-      lockedUntil
+    // Prepare booking data
+    const bookingData = {
+      timeSlotId,
+      specialtyId,
+      sessionType: sessionType || 'in_person',
+      notes: notes || null,
+      patientId: patient.id,
+      caregiverId: timeSlot.caregiverId,
+      locationId: locationId || null
+    };
+
+    // Step 1: Atomically lock slot and create pending booking with transaction
+    const { pendingBooking, lockedUntil } = await bookingService.lockSlotWithPendingBooking(bookingData);
+
+    console.log('✅ Pending booking created:', {
+      id: pendingBooking.id,
+      timeSlotId: pendingBooking.timeSlotId,
+      expiresAt: lockedUntil
     });
 
+    // Step 2: Prepare customer details for payment
     const customerDetails = {
       email: patient.User.email,
       firstName: patient.User.firstName,
@@ -47,24 +69,61 @@ const initiateBookingPaymentEndpoint = async (req, res, next) => {
       phone: phoneNumber || patient.User.phone || '+265 998 95 15 10'
     };
 
-    const bookingData = {
-      timeSlotId,
-      specialtyId,
-      sessionType,
-      notes,
-      patientId: patient.id,
-      caregiverId: timeSlot.caregiverId
-    };
+    // Step 3: Initiate payment with Paychangu
+    const paymentResult = await initiateBookingPayment(bookingData, customerDetails, pendingBooking.id);
 
-    const paymentResult = await initiateBookingPayment(bookingData, customerDetails);
+    console.log('💳 Payment initiated:', {
+      tx_ref: paymentResult.tx_ref,
+      checkoutUrl: paymentResult.checkoutUrl
+    });
 
+    // Step 4: Update pending booking with payment reference and link to pending transaction
+    await pendingBooking.update({
+      tx_ref: paymentResult.tx_ref,
+      status: 'payment_initiated'
+    });
+
+    // Update pending payment transaction with booking ID
+    await paymentResult.transaction.update({
+      pendingBookingId: pendingBooking.id
+    });
+
+    console.log('🔗 Pending booking linked to payment:', {
+      pendingBookingId: pendingBooking.id,
+      tx_ref: paymentResult.tx_ref
+    });
+
+    // Return response with checkout URL
     res.status(201).json({
       message: 'Booking payment initiated successfully',
       checkoutUrl: paymentResult.checkoutUrl,
       tx_ref: paymentResult.tx_ref,
-      transaction: paymentResult.transaction
+      pendingBookingId: pendingBooking.id,
+      expiresAt: lockedUntil,
+      expiresInMinutes: 10,
+      transaction: paymentResult.transaction,
+      bookingFee: pendingBooking.bookingFee,
+      sessionFee: pendingBooking.sessionFee,
+      totalAmount: pendingBooking.totalAmount
     });
   } catch (error) {
+    console.error('❌ Booking payment initiation failed:', error);
+
+    // Provide user-friendly error messages
+    if (error.message.includes('not available')) {
+      return res.status(409).json({
+        error: 'This time slot is no longer available. Please select a different time slot.',
+        code: 'SLOT_UNAVAILABLE'
+      });
+    }
+
+    if (error.message.includes('not found')) {
+      return res.status(404).json({
+        error: error.message,
+        code: 'RESOURCE_NOT_FOUND'
+      });
+    }
+
     next(error);
   }
 };
