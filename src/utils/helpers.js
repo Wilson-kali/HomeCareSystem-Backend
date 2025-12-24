@@ -10,7 +10,12 @@ const formatDate = (date) => {
 
 const sanitizeUser = (user) => {
   const userData = user.toJSON ? user.toJSON() : user;
-  const { password, ...userWithoutPassword } = userData;
+  const { 
+    password, 
+    resetPasswordToken, 
+    resetPasswordExpires, 
+    ...userWithoutPassword 
+  } = userData;
   
   // Add role name from Role association
   if (userData.Role) {

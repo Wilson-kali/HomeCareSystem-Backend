@@ -6,8 +6,20 @@ const getProfile = async (req, res, next) => {
     const user = await User.findByPk(req.user.id, {
       include: [
         { model: Role, attributes: ['name'] },
-        { model: Patient, required: false },
-        { model: Caregiver, required: false },
+        { 
+          model: Patient, 
+          required: false,
+          attributes: {
+            exclude: ['medicalHistory', 'currentMedications', 'allergies'] // Remove medical info
+          }
+        },
+        { 
+          model: Caregiver, 
+          required: false,
+          attributes: {
+            include: ['profileImage', 'idDocuments', 'supportingDocuments'] // Include file fields
+          }
+        },
         { model: PrimaryPhysician, required: false }
       ]
     });
@@ -52,10 +64,9 @@ const updateProfile = async (req, res, next) => {
       dateOfBirth,
       address,
       emergencyContact,
-      medicalHistory,
-      allergies,
       ...otherData 
     } = req.body;
+    const uploadedFiles = req.files || {};
     
     const user = await User.findByPk(req.user.id, {
       include: [
@@ -79,18 +90,41 @@ const updateProfile = async (req, res, next) => {
       if (dateOfBirth) patientData.dateOfBirth = dateOfBirth;
       if (address) patientData.address = address;
       if (emergencyContact) patientData.emergencyContact = emergencyContact;
-      if (medicalHistory !== undefined) patientData.medicalHistory = medicalHistory;
-      if (allergies !== undefined) patientData.allergies = allergies;
       
       await user.Patient.update(patientData);
+    }
+
+    // Update caregiver profile image
+    if (user.Role.name === 'caregiver' && user.Caregiver && uploadedFiles.profileImage) {
+      try {
+        const { uploadToCloudinary } = require('../services/cloudinaryService');
+        const uploadResult = await uploadToCloudinary(uploadedFiles.profileImage[0], 'caregiver-profiles');
+        await user.Caregiver.update({
+          profileImage: uploadResult.url
+        });
+      } catch (uploadError) {
+        console.error('Profile image upload failed:', uploadError);
+      }
     }
 
     // Fetch updated user with all associations
     const updatedUser = await User.findByPk(req.user.id, {
       include: [
         { model: Role, attributes: ['name'] },
-        { model: Patient, required: false },
-        { model: Caregiver, required: false },
+        { 
+          model: Patient, 
+          required: false,
+          attributes: {
+            exclude: ['medicalHistory', 'currentMedications', 'allergies']
+          }
+        },
+        { 
+          model: Caregiver, 
+          required: false,
+          attributes: {
+            include: ['profileImage', 'idDocuments', 'supportingDocuments']
+          }
+        },
         { model: PrimaryPhysician, required: false }
       ]
     });

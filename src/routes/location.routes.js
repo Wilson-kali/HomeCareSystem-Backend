@@ -1,8 +1,32 @@
 const express = require('express');
 const { Op } = require('sequelize');
 const Location = require('../models/Location');
+const { Caregiver, User } = require('../models');
+const { authenticateToken } = require('../middleware/auth.middleware');
 
 const router = express.Router();
+
+// Get all locations (for admin filters)
+router.get('/', authenticateToken, async (req, res) => {
+  try {
+    const locations = await Location.findAll({
+      attributes: ['id', 'region', 'district', 'traditionalAuthority'],
+      group: ['region', 'district', 'traditionalAuthority', 'id'],
+      order: [['region', 'ASC'], ['district', 'ASC']]
+    });
+    
+    res.json({
+      success: true,
+      locations
+    });
+  } catch (error) {
+    console.error('Error fetching locations:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch locations'
+    });
+  }
+});
 
 // Get all regions
 router.get('/regions', async (req, res) => {
@@ -205,3 +229,69 @@ router.get('/hierarchy', async (req, res) => {
 });
 
 module.exports = router;
+
+// Get unique districts for admin filters
+router.get('/districts', authenticateToken, async (req, res) => {
+  try {
+    const districts = await Location.findAll({
+      attributes: ['district', 'region'],
+      group: ['district', 'region'],
+      order: [['region', 'ASC'], ['district', 'ASC']]
+    });
+    
+    res.json({
+      success: true,
+      districts
+    });
+  } catch (error) {
+    console.error('Error fetching districts:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch districts'
+    });
+  }
+});
+
+// Get unique traditional authorities for admin filters
+router.get('/traditional-authorities', authenticateToken, async (req, res) => {
+  try {
+    const tas = await Location.findAll({
+      attributes: ['traditionalAuthority', 'district', 'region'],
+      group: ['traditionalAuthority', 'district', 'region'],
+      order: [['region', 'ASC'], ['district', 'ASC'], ['traditionalAuthority', 'ASC']]
+    });
+    
+    res.json({
+      success: true,
+      traditionalAuthorities: tas
+    });
+  } catch (error) {
+    console.error('Error fetching traditional authorities:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch traditional authorities'
+    });
+  }
+});
+
+// Get unique villages for admin filters
+router.get('/villages', authenticateToken, async (req, res) => {
+  try {
+    const villages = await Location.findAll({
+      attributes: ['village', 'traditionalAuthority', 'district', 'region'],
+      group: ['village', 'traditionalAuthority', 'district', 'region'],
+      order: [['region', 'ASC'], ['district', 'ASC'], ['traditionalAuthority', 'ASC'], ['village', 'ASC']]
+    });
+    
+    res.json({
+      success: true,
+      villages
+    });
+  } catch (error) {
+    console.error('Error fetching villages:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch villages'
+    });
+  }
+});

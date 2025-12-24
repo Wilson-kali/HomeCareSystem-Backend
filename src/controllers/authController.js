@@ -15,7 +15,7 @@ const register = async (req, res, next) => {
   
   try {
     const { email, password, firstName, lastName, phone, idNumber, role = 'patient', ...roleSpecificData } = req.body;
-    const uploadedFiles = req.files || [];
+    const uploadedFiles = req.files || {};
 
     // Find the role
     const userRole = await Role.findOne({ where: { name: role } });
@@ -89,19 +89,53 @@ const register = async (req, res, next) => {
       case 'caregiver':
         // Handle document uploads for caregivers
         let documentUrls = [];
-        if (uploadedFiles.length > 0) {
+        let profilePictureUrl = null;
+        let idDocumentUrls = [];
+        
+        if (Object.keys(uploadedFiles).length > 0) {
           const { uploadToCloudinary } = require('../services/cloudinaryService');
-          for (const file of uploadedFiles.slice(0, 5)) { // Max 5 files
+          
+          // Handle supporting documents (max 5)
+          if (uploadedFiles.supportingDocuments) {
+            for (const file of uploadedFiles.supportingDocuments.slice(0, 5)) {
+              try {
+                const uploadResult = await uploadToCloudinary(file, 'caregiver-documents');
+                documentUrls.push({
+                  url: uploadResult.url,
+                  public_id: uploadResult.public_id,
+                  filename: file.originalname,
+                  format: uploadResult.format
+                });
+              } catch (uploadError) {
+                console.error('Supporting document upload failed:', uploadError);
+              }
+            }
+          }
+          
+          // Handle profile picture (single file)
+          if (uploadedFiles.profilePicture && uploadedFiles.profilePicture[0]) {
             try {
-              const uploadResult = await uploadToCloudinary(file);
-              documentUrls.push({
-                url: uploadResult.url,
-                public_id: uploadResult.public_id,
-                filename: file.originalname,
-                format: uploadResult.format
-              });
+              const uploadResult = await uploadToCloudinary(uploadedFiles.profilePicture[0], 'caregiver-profiles');
+              profilePictureUrl = uploadResult.url; // Store just the URL string
             } catch (uploadError) {
-              console.error('File upload failed:', uploadError);
+              console.error('Profile picture upload failed:', uploadError);
+            }
+          }
+          
+          // Handle ID documents (max 3)
+          if (uploadedFiles.idDocuments) {
+            for (const file of uploadedFiles.idDocuments.slice(0, 3)) {
+              try {
+                const uploadResult = await uploadToCloudinary(file, 'caregiver-ids');
+                idDocumentUrls.push({
+                  url: uploadResult.url,
+                  public_id: uploadResult.public_id,
+                  filename: file.originalname,
+                  format: uploadResult.format
+                });
+              } catch (uploadError) {
+                console.error('ID document upload failed:', uploadError);
+              }
             }
           }
         }
@@ -114,7 +148,9 @@ const register = async (req, res, next) => {
           qualifications: roleSpecificData.qualifications || 'To be updated',
           hourlyRate: roleSpecificData.hourlyRate || 50.00,
           appointmentDuration: parseInt(process.env.DEFAULT_APPOINTMENT_DURATION) || 180,
-          supportingDocuments: documentUrls,
+          supportingDocuments: documentUrls.length > 0 ? documentUrls : null,
+          profileImage: profilePictureUrl,
+          idDocuments: idDocumentUrls.length > 0 ? idDocumentUrls : null,
           bio: roleSpecificData.bio,
           region: roleSpecificData.region,
           district: roleSpecificData.district,

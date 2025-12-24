@@ -1,5 +1,4 @@
 const {
-  initiatePayment,
   initiateBookingPayment,
   verifyPayment,
   processWebhook,
@@ -8,6 +7,7 @@ const {
 } = require('../services/paymentService');
 const bookingService = require('../services/bookingService');
 const { User, Patient, TimeSlot, Location } = require('../models');
+const paymentConfig = require('../config/payment');
 
 /**
  * Initiate Booking Payment with Race Condition Prevention
@@ -93,7 +93,10 @@ const initiateBookingPaymentEndpoint = async (req, res, next) => {
       tx_ref: paymentResult.tx_ref
     });
 
-    // Return response with checkout URL
+    // Extract fee breakdown from transaction metadata
+    const feeBreakdown = paymentResult.transaction.metadata?.feeBreakdown || {};
+
+    // Return response with checkout URL and fee breakdown
     res.status(201).json({
       message: 'Booking payment initiated successfully',
       checkoutUrl: paymentResult.checkoutUrl,
@@ -102,9 +105,11 @@ const initiateBookingPaymentEndpoint = async (req, res, next) => {
       expiresAt: lockedUntil,
       expiresInMinutes: 10,
       transaction: paymentResult.transaction,
-      bookingFee: pendingBooking.bookingFee,
+      bookingFee: feeBreakdown.baseFee || pendingBooking.bookingFee,
+      convenienceFee: feeBreakdown.convenienceFee || 0,
+      convenienceFeePercentage: feeBreakdown.convenienceFeePercentage || 0,
       sessionFee: pendingBooking.sessionFee,
-      totalAmount: pendingBooking.totalAmount
+      totalAmount: feeBreakdown.totalAmount || pendingBooking.bookingFee
     });
   } catch (error) {
     console.error('❌ Booking payment initiation failed:', error);
@@ -128,43 +133,6 @@ const initiateBookingPaymentEndpoint = async (req, res, next) => {
   }
 };
 
-/**
- * Initiate Payment for Appointment (Legacy)
- * POST /api/payments/initiate
- */
-const initiateAppointmentPayment = async (req, res, next) => {
-  try {
-    const { appointmentId, phoneNumber, paymentType, amount } = req.body;
-
-    // Get patient details for payment
-    const patient = await Patient.findOne({
-      where: { userId: req.user.id },
-      include: [{ model: User }]
-    });
-
-    if (!patient) {
-      return res.status(404).json({ error: 'Patient profile not found' });
-    }
-
-    const customerDetails = {
-      email: patient.User.email,
-      firstName: patient.User.firstName,
-      lastName: patient.User.lastName,
-      phone: phoneNumber || patient.User.phone || '+265 998 95 15 10'
-    };
-
-    const paymentResult = await initiatePayment(appointmentId, customerDetails, paymentType, amount);
-
-    res.status(201).json({
-      message: 'Payment initiated successfully',
-      checkoutUrl: paymentResult.checkoutUrl,
-      tx_ref: paymentResult.tx_ref,
-      transaction: paymentResult.transaction
-    });
-  } catch (error) {
-    next(error);
-  }
-};
 
 /**
  * Verify Payment Status
@@ -281,9 +249,153 @@ const getPaymentHistory = async (req, res, next) => {
   }
 };
 
+/**
+ * Initiate Session Fee Payment
+ * POST /api/payments/initiate-session
+ */
+const initiateSessionPayment = async (req, res, next) => {
+  try {
+    const { appointmentId } = req.body;
+
+    if (!appointmentId) {
+      return res.status(400).json({
+        error: 'Missing required field: appointmentId'
+      });
+    }
+
+    // Get patient details
+    const patient = await Patient.findOne({
+      where: { userId: req.user.id },
+      include: [{ model: User }]
+    });
+
+    if (!patient) {
+      return res.status(404).json({ error: 'Patient profile not found' });
+    }
+
+    // Get appointment details
+    const { Appointment, Specialty } = require('../models');
+    const appointment = await Appointment.findOne({
+      where: { id: appointmentId, patientId: patient.id },
+      include: [{ model: Specialty }]
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Check if session fee is already paid
+    if (appointment.sessionFeeStatus === 'completed') {
+      return res.status(400).json({ error: 'Session fee already paid' });
+    }
+
+    // Prepare customer details
+    const customerDetails = {
+      email: patient.User.email,
+      firstName: patient.User.firstName,
+      lastName: patient.User.lastName,
+      phone: patient.User.phone || '+265 998 95 15 10'
+    };
+
+    // Create pending payment transaction for session fee
+    const { PendingPaymentTransaction } = require('../models');
+    const baseFee = parseFloat(appointment.sessionFee || appointment.Specialty?.sessionFee || 0);
+
+    // Get rates from config (these will be saved to DB for audit trail)
+    const taxRate = paymentConfig.paychangu.taxRate;
+    const convenienceFeeRate = paymentConfig.paychangu.convenienceFeePercentage;
+    const platformCommissionRate = paymentConfig.paychangu.platformCommissionRate;
+
+    // Calculate all fees
+    const taxAmount = Math.round((baseFee * taxRate) / 100);
+    const convenienceFeeAmount = Math.round((baseFee * convenienceFeeRate) / 100);
+    const platformCommissionAmount = Math.round((baseFee * platformCommissionRate) / 100);
+    const caregiverEarnings = baseFee - platformCommissionAmount;
+    const totalSessionAmount = parseFloat((baseFee + taxAmount + convenienceFeeAmount).toFixed(2));
+
+    const tx_ref = `HC-${appointmentId}-${Date.now()}`;
+
+    const pendingTransaction = await PendingPaymentTransaction.create({
+      appointmentId: appointmentId,
+      amount: totalSessionAmount,
+      paymentType: 'session_fee',
+      currency: 'MWK',
+      paymentMethod: 'mobile_money',
+      tx_ref: tx_ref,
+      status: 'pending',
+      pendingBookingId: null, // Explicitly set to null for session payments
+      metadata: {
+        feeBreakdown: {
+          baseFee: baseFee,
+          taxRate: taxRate,
+          taxAmount: taxAmount,
+          convenienceFeeRate: convenienceFeeRate,
+          convenienceFeeAmount: convenienceFeeAmount,
+          platformCommissionRate: platformCommissionRate,
+          platformCommissionAmount: platformCommissionAmount,
+          caregiverEarnings: caregiverEarnings,
+          totalAmount: totalSessionAmount
+        }
+      }
+    });
+
+    // Use existing payment service but with pending transaction approach
+    const axios = require('axios');
+
+    const paymentData = {
+      amount: totalSessionAmount,
+      currency: 'MWK',
+      email: customerDetails.email,
+      first_name: customerDetails.firstName,
+      last_name: customerDetails.lastName,
+      phone_number: customerDetails.phone,
+      callback_url: `${paymentConfig.paychangu.webhookBaseUrl}/api/payments/webhook`,
+      return_url: `${process.env.FRONTEND_URL}/appointments`,
+      tx_ref: tx_ref,
+      customization: {
+        title: 'Home Care System',
+        description: `Session Fee for Appointment #${appointmentId} (incl. ${taxRate}% tax & ${convenienceFeeRate}% processing fee)`
+      }
+    };
+
+    const response = await axios.post(
+      `${paymentConfig.paychangu.apiUrl}/payment`,
+      paymentData,
+      {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${paymentConfig.paychangu.secretKey}`
+        }
+      }
+    );
+
+    const checkoutUrl = response.data.data.checkout_url;
+
+    res.status(201).json({
+      message: 'Session fee payment initiated successfully',
+      checkoutUrl: checkoutUrl,
+      tx_ref: tx_ref,
+      transaction: pendingTransaction,
+      baseFee: baseFee,
+      taxRate: taxRate,
+      taxAmount: taxAmount,
+      convenienceFeeRate: convenienceFeeRate,
+      convenienceFeeAmount: convenienceFeeAmount,
+      platformCommissionRate: platformCommissionRate,
+      platformCommissionAmount: platformCommissionAmount,
+      caregiverEarnings: caregiverEarnings,
+      totalAmount: totalSessionAmount
+    });
+  } catch (error) {
+    console.error('❌ Session payment initiation failed:', error);
+    next(error);
+  }
+};
+
 module.exports = {
-  initiateAppointmentPayment,
   initiateBookingPaymentEndpoint,
+  initiateSessionPayment,
   verifyPaymentStatus,
   handlePaymentWebhook,
   getPaymentsForAppointment,

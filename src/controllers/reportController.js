@@ -103,7 +103,14 @@ const getReports = async (req, res, next) => {
         {
           model: Appointment,
           include: [
-            { model: Patient, include: [{ model: User }] }
+            { model: Patient, include: [{ model: User }] },
+            { 
+              model: Caregiver, 
+              include: [{ 
+                model: User,
+                attributes: ['firstName', 'lastName', 'email']
+              }]
+            }
           ]
         }
       ],
@@ -131,7 +138,13 @@ const getReportById = async (req, res, next) => {
           model: Appointment,
           include: [
             { model: Patient, include: [{ model: User }] },
-            { model: Caregiver, include: [{ model: User }] }
+            { 
+              model: Caregiver, 
+              include: [{ 
+                model: User,
+                attributes: ['firstName', 'lastName', 'email']
+              }]
+            }
           ]
         }
       ]

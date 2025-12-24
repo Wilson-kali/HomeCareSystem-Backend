@@ -1,15 +1,197 @@
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth.middleware');
-const { PaymentTransaction, Appointment, Patient, User, Caregiver } = require('../models');
+const { PaymentTransaction, Appointment, Patient, User, Caregiver, Specialty } = require('../models');
+const { Op } = require('sequelize');
 
 const router = express.Router();
 
 router.use(authenticateToken);
 
+// Get earnings for admin (all platform earnings)
+router.get('/admin', async (req, res, next) => {
+  try {
+    const { period = 'this-month', caregiverId, region, district, traditionalAuthority, village, patientSearch, startDate, endDate, page = 1, limit = 100 } = req.query;
+    
+    // Check if user is admin
+    if (req.user.role !== 'system_manager' && req.user.role !== 'regional_manager') {
+      return res.status(403).json({ error: 'Access denied. Admin role required.' });
+    }
+
+    // Get date range based on period or custom dates
+    const now = new Date();
+    let dateStart, dateEnd;
+    
+    if (period === 'custom' && startDate && endDate) {
+      dateStart = new Date(startDate);
+      dateEnd = new Date(endDate);
+      dateEnd.setHours(23, 59, 59, 999); // End of day
+    } else {
+      switch (period) {
+        case 'this-week':
+          dateStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+          break;
+        case 'this-month':
+          dateStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          break;
+        case 'last-month':
+          dateStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          dateEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+          break;
+        case 'this-year':
+          dateStart = new Date(now.getFullYear(), 0, 1);
+          break;
+        default:
+          dateStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      }
+      if (!dateEnd) {
+        dateEnd = new Date();
+      }
+    }
+
+    // Build where conditions
+    const whereConditions = {
+      createdAt: { 
+        [Op.gte]: dateStart,
+        [Op.lte]: dateEnd
+      }
+    };
+
+    const appointmentWhere = {};
+    const caregiverWhere = {};
+    const patientUserWhere = {};
+
+    // Filter by caregiver
+    if (caregiverId && caregiverId !== 'all') {
+      appointmentWhere.caregiverId = caregiverId;
+    }
+
+    // Filter by location (region, district, traditional authority, village)
+    if (region && region !== 'all') {
+      caregiverWhere.region = region;
+    }
+    if (district && district !== 'all') {
+      caregiverWhere.district = district;
+    }
+    if (traditionalAuthority && traditionalAuthority !== 'all') {
+      caregiverWhere.traditionalAuthority = traditionalAuthority;
+    }
+    if (village && village !== 'all') {
+      caregiverWhere.village = village;
+    }
+
+    // Filter by patient search
+    if (patientSearch) {
+      patientUserWhere[Op.or] = [
+        { firstName: { [Op.iLike]: `%${patientSearch}%` } },
+        { lastName: { [Op.iLike]: `%${patientSearch}%` } },
+        { email: { [Op.iLike]: `%${patientSearch}%` } }
+      ];
+    }
+
+    // Calculate pagination
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    
+    // Get all transactions with proper includes
+    const { count, rows: transactions } = await PaymentTransaction.findAndCountAll({
+      include: [
+        {
+          model: Appointment,
+          required: Object.keys(caregiverWhere).length > 0 || Object.keys(appointmentWhere).length > 0,
+          where: Object.keys(appointmentWhere).length > 0 ? appointmentWhere : undefined,
+          include: [
+            {
+              model: Patient,
+              required: Object.keys(patientUserWhere).length > 0,
+              include: [{ 
+                model: User, 
+                attributes: ['firstName', 'lastName', 'email', 'phone'],
+                where: Object.keys(patientUserWhere).length > 0 ? patientUserWhere : undefined,
+                required: Object.keys(patientUserWhere).length > 0
+              }]
+            },
+            {
+              model: Caregiver,
+              where: Object.keys(caregiverWhere).length > 0 ? caregiverWhere : undefined,
+              required: Object.keys(caregiverWhere).length > 0,
+              include: [{ 
+                model: User, 
+                attributes: ['firstName', 'lastName', 'email', 'phone'] 
+              }]
+            },
+            {
+              model: Specialty,
+              attributes: ['name']
+            }
+          ]
+        }
+      ],
+      where: whereConditions,
+      order: [['createdAt', 'DESC']],
+      limit: parseInt(limit),
+      offset: offset
+    });
+
+    // Get completed appointments count (session_attended status)
+    const completedAppointments = await Appointment.count({
+      where: {
+        status: 'session_attended',
+        createdAt: { 
+          [Op.gte]: dateStart,
+          [Op.lte]: dateEnd
+        },
+        ...(Object.keys(appointmentWhere).length > 0 ? appointmentWhere : {})
+      },
+      include: Object.keys(caregiverWhere).length > 0 ? [{
+        model: Caregiver,
+        where: caregiverWhere,
+        required: true
+      }] : []
+    });
+
+    // Calculate totals (only completed transactions)
+    const completedTransactions = transactions.filter(t => t.status === 'completed');
+    const total = completedTransactions.reduce((sum, t) => sum + parseFloat(t.amount), 0);
+    const thisMonth = completedTransactions
+      .filter(t => t.createdAt >= new Date(now.getFullYear(), now.getMonth(), 1))
+      .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+    
+    const uniqueCaregivers = new Set(transactions.map(t => t.Appointment?.caregiverId)).size;
+    const uniquePatients = new Set(transactions.map(t => t.Appointment?.patientId)).size;
+
+    res.json({
+      total: total.toFixed(2),
+      thisMonth: thisMonth.toFixed(2),
+      completedSessions: completedAppointments,
+      uniqueCaregivers,
+      uniquePatients,
+      transactions,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(count / parseInt(limit)),
+        totalRecords: count,
+        pageSize: parseInt(limit)
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get earnings for caregiver
 router.get('/caregiver', async (req, res, next) => {
   try {
-    const { period = 'this-month' } = req.query;
+    const { 
+      period = 'this-month', 
+      startDate, 
+      endDate, 
+      patientSearch, 
+      region, 
+      district, 
+      traditionalAuthority, 
+      village,
+      page = 1, 
+      limit = 100 
+    } = req.query;
     
     // Find caregiver by user ID
     const caregiver = await Caregiver.findOne({ where: { userId: req.user.id } });
@@ -17,45 +199,105 @@ router.get('/caregiver', async (req, res, next) => {
       return res.status(404).json({ error: 'Caregiver profile not found' });
     }
 
-    // Get date range based on period
+    // Get date range based on period or custom dates
     const now = new Date();
-    let startDate;
+    let dateStart, dateEnd;
     
-    switch (period) {
-      case 'this-week':
-        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
-        break;
-      case 'this-month':
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-        break;
-      case 'last-month':
-        startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        break;
-      case 'this-year':
-        startDate = new Date(now.getFullYear(), 0, 1);
-        break;
-      default:
-        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+    if (period === 'custom' && startDate && endDate) {
+      dateStart = new Date(startDate);
+      dateEnd = new Date(endDate);
+      dateEnd.setHours(23, 59, 59, 999);
+    } else {
+      switch (period) {
+        case 'this-week':
+          dateStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+          break;
+        case 'this-month':
+          dateStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          break;
+        case 'last-month':
+          dateStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          dateEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+          break;
+        case 'this-year':
+          dateStart = new Date(now.getFullYear(), 0, 1);
+          break;
+        default:
+          dateStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      }
+      if (!dateEnd) {
+        dateEnd = new Date();
+      }
     }
 
+    // Build where conditions
+    const whereConditions = {
+      createdAt: { 
+        [Op.gte]: dateStart,
+        [Op.lte]: dateEnd
+      }
+    };
+
+    const appointmentWhere = { caregiverId: caregiver.id };
+    const patientWhere = {};
+    const patientUserWhere = {};
+
+    // Filter by patient search
+    if (patientSearch) {
+      patientUserWhere[Op.or] = [
+        { firstName: { [Op.iLike]: `%${patientSearch}%` } },
+        { lastName: { [Op.iLike]: `%${patientSearch}%` } },
+        { email: { [Op.iLike]: `%${patientSearch}%` } }
+      ];
+    }
+
+    // Filter by patient location
+    if (region && region !== 'all') {
+      patientWhere.region = region;
+    }
+    if (district && district !== 'all') {
+      patientWhere.district = district;
+    }
+    if (traditionalAuthority && traditionalAuthority !== 'all') {
+      patientWhere.traditionalAuthority = traditionalAuthority;
+    }
+    if (village && village !== 'all') {
+      patientWhere.village = village;
+    }
+
+    // Calculate pagination
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
     // Get transactions for caregiver's appointments
-    const transactions = await PaymentTransaction.findAll({
+    const { count, rows: transactions } = await PaymentTransaction.findAndCountAll({
       include: [
         {
           model: Appointment,
-          where: { caregiverId: caregiver.id },
+          where: appointmentWhere,
+          required: true,
           include: [
             {
               model: Patient,
-              include: [{ model: User, attributes: ['firstName', 'lastName'] }]
+              where: Object.keys(patientWhere).length > 0 ? patientWhere : undefined,
+              required: Object.keys(patientWhere).length > 0 || Object.keys(patientUserWhere).length > 0,
+              include: [{ 
+                model: User, 
+                attributes: ['firstName', 'lastName', 'email', 'phone'],
+                where: Object.keys(patientUserWhere).length > 0 ? patientUserWhere : undefined,
+                required: Object.keys(patientUserWhere).length > 0
+              }]
+            },
+            {
+              model: Specialty,
+              attributes: ['name']
             }
           ]
         }
       ],
-      where: {
-        createdAt: { [require('sequelize').Op.gte]: startDate }
-      },
-      order: [['createdAt', 'DESC']]
+      where: whereConditions,
+      order: [['createdAt', 'DESC']],
+      limit: parseInt(limit),
+      offset: offset
     });
 
     // Calculate totals
@@ -72,7 +314,138 @@ router.get('/caregiver', async (req, res, next) => {
       thisMonth: thisMonth.toFixed(2),
       sessionsCompleted,
       averagePerSession: averagePerSession.toFixed(2),
-      transactions
+      transactions,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(count / parseInt(limit)),
+        totalRecords: count,
+        pageSize: parseInt(limit)
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Search caregivers by name or email
+router.get('/caregivers/search', async (req, res, next) => {
+  try {
+    const { q } = req.query;
+    
+    if (!q || q.length < 2) {
+      return res.json({ caregivers: [] });
+    }
+
+    const caregivers = await Caregiver.findAll({
+      include: [{
+        model: User,
+        attributes: ['firstName', 'lastName', 'email'],
+        where: {
+          [Op.or]: [
+            { firstName: { [Op.iLike]: `%${q}%` } },
+            { lastName: { [Op.iLike]: `%${q}%` } },
+            { email: { [Op.iLike]: `%${q}%` } }
+          ]
+        }
+      }],
+      limit: 20
+    });
+
+    res.json({ caregivers });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Add payment history endpoint for patients
+router.get('/payments/history', async (req, res, next) => {
+  try {
+    const { 
+      period = 'this-month', 
+      startDate, 
+      endDate,
+      page = 1, 
+      limit = 100 
+    } = req.query;
+    
+    // Find patient by user ID
+    const patient = await Patient.findOne({ where: { userId: req.user.id } });
+    if (!patient) {
+      return res.status(404).json({ error: 'Patient profile not found' });
+    }
+
+    // Get date range based on period or custom dates
+    const now = new Date();
+    let dateStart, dateEnd;
+    
+    if (period === 'custom' && startDate && endDate) {
+      dateStart = new Date(startDate);
+      dateEnd = new Date(endDate);
+      dateEnd.setHours(23, 59, 59, 999);
+    } else {
+      switch (period) {
+        case 'this-week':
+          dateStart = new Date(now.getFullYear(), now.getMonth(), now.getDate() - now.getDay());
+          break;
+        case 'this-month':
+          dateStart = new Date(now.getFullYear(), now.getMonth(), 1);
+          break;
+        case 'last-month':
+          dateStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          dateEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+          break;
+        case 'this-year':
+          dateStart = new Date(now.getFullYear(), 0, 1);
+          break;
+        default:
+          dateStart = new Date(now.getFullYear(), now.getMonth(), 1);
+      }
+      if (!dateEnd) {
+        dateEnd = new Date();
+      }
+    }
+
+    // Calculate pagination
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+
+    const { count, rows: payments } = await PaymentTransaction.findAndCountAll({
+      include: [{
+        model: Appointment,
+        where: { patientId: patient.id },
+        include: [{
+          model: Caregiver,
+          include: [{ model: User, attributes: ['firstName', 'lastName'] }]
+        }, {
+          model: Specialty,
+          attributes: ['name']
+        }]
+      }],
+      where: {
+        createdAt: { 
+          [Op.gte]: dateStart,
+          [Op.lte]: dateEnd
+        }
+      },
+      order: [['createdAt', 'DESC']],
+      limit: parseInt(limit),
+      offset: offset
+    });
+
+    const total = payments.reduce((sum, p) => sum + parseFloat(p.amount), 0);
+    const thisMonth = payments
+      .filter(p => p.createdAt >= new Date(now.getFullYear(), now.getMonth(), 1))
+      .reduce((sum, p) => sum + parseFloat(p.amount), 0);
+
+    res.json({
+      total: total.toFixed(2),
+      thisMonth: thisMonth.toFixed(2),
+      payments,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(count / parseInt(limit)),
+        totalRecords: count,
+        pageSize: parseInt(limit)
+      }
     });
   } catch (error) {
     next(error);

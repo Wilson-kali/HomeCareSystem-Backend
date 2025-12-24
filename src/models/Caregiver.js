@@ -49,8 +49,11 @@ const Caregiver = sequelize.define('Caregiver', {
     type: DataTypes.STRING
   },
   supportingDocuments: {
+    type: DataTypes.JSON
+  },
+  idDocuments: {
     type: DataTypes.JSON,
-    defaultValue: []
+    comment: 'ID documents uploaded during registration'
   },
   appointmentDuration: {
     type: DataTypes.INTEGER,

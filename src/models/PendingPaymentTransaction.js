@@ -10,8 +10,13 @@ const PendingPaymentTransaction = sequelize.define('PendingPaymentTransaction', 
   },
   pendingBookingId: {
     type: DataTypes.INTEGER,
-    allowNull: false,
+    allowNull: true, // Allow null for session fee payments
     references: { model: 'pending_bookings', key: 'id' }
+  },
+  appointmentId: {
+    type: DataTypes.INTEGER,
+    allowNull: true, // For session fee payments
+    references: { model: 'appointments', key: 'id' }
   },
   amount: {
     type: DataTypes.DECIMAL(10, 2),

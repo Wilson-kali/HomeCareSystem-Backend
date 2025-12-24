@@ -15,7 +15,48 @@ const PaymentTransaction = sequelize.define('PaymentTransaction', {
   },
   amount: {
     type: DataTypes.DECIMAL(10, 2),
-    allowNull: false
+    allowNull: false,
+    comment: 'Total amount paid by patient (base + tax + convenience fee)'
+  },
+  baseFee: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    comment: 'Base fee before tax and convenience fee'
+  },
+  taxRate: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: true,
+    comment: 'Tax rate percentage used (saved from ENV at transaction time)'
+  },
+  taxAmount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    comment: 'Tax amount charged'
+  },
+  convenienceFeeRate: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: true,
+    comment: 'Convenience/processing fee rate percentage (saved from ENV)'
+  },
+  convenienceFeeAmount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    comment: 'Convenience/processing fee amount'
+  },
+  platformCommissionRate: {
+    type: DataTypes.DECIMAL(5, 2),
+    allowNull: true,
+    comment: 'Platform commission rate percentage (saved from ENV)'
+  },
+  platformCommissionAmount: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    comment: 'Platform commission amount (deducted from base fee)'
+  },
+  caregiverEarnings: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: true,
+    comment: 'Amount payable to caregiver (baseFee - platformCommission)'
   },
   paymentType: {
     type: DataTypes.ENUM('booking_fee', 'session_fee'),
@@ -45,6 +86,10 @@ const PaymentTransaction = sequelize.define('PaymentTransaction', {
   },
   refundedAt: {
     type: DataTypes.DATE
+  },
+  metadata: {
+    type: DataTypes.JSON,
+    comment: 'Additional payment metadata'
   }
 }, {
   tableName: 'paymenttransactions'

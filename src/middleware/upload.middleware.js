@@ -31,6 +31,10 @@ const upload = multer({
   fileFilter
 });
 
-const uploadMultiple = upload.array('supportingDocuments', 5); // Max 5 files
+const uploadMultiple = upload.fields([
+  { name: 'supportingDocuments', maxCount: 5 },
+  { name: 'profilePicture', maxCount: 1 },
+  { name: 'idDocuments', maxCount: 3 }
+]);
 
 module.exports = { upload, uploadMultiple };

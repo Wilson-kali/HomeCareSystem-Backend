@@ -1,4 +1,4 @@
-const { Caregiver, User, Specialty, TimeSlot } = require('../models');
+const { Caregiver, User, Specialty, TimeSlot, Patient, Appointment } = require('../models');
 const { VERIFICATION_STATUS, TIMESLOT_STATUS } = require('../utils/constants');
 const { Op } = require('sequelize');
 
@@ -164,10 +164,40 @@ const updateSpecialties = async (req, res, next) => {
   }
 };
 
+const getMyPatients = async (req, res, next) => {
+  try {
+    const caregiver = await Caregiver.findOne({ where: { userId: req.user.id } });
+    if (!caregiver) {
+      return res.status(404).json({ error: 'Caregiver profile not found' });
+    }
+
+    const appointments = await Appointment.findAll({
+      where: { caregiverId: caregiver.id },
+      include: [{
+        model: Patient,
+        include: [{ model: User, attributes: ['firstName', 'lastName', 'email', 'phone'] }]
+      }]
+    });
+
+    const patientsMap = new Map();
+    appointments.forEach(appointment => {
+      if (appointment.Patient && !patientsMap.has(appointment.Patient.id)) {
+        patientsMap.set(appointment.Patient.id, appointment.Patient);
+      }
+    });
+
+    const patients = Array.from(patientsMap.values());
+    res.json({ patients });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getCaregivers,
   getCaregiverById,
   getProfile,
   updateProfile,
-  updateSpecialties
+  updateSpecialties,
+  getMyPatients
 };

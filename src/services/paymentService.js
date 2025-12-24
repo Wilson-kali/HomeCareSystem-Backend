@@ -22,14 +22,19 @@ const initiateBookingPayment = async (bookingData, customerDetails, pendingBooki
       throw new Error('Specialty not found');
     }
 
-    const bookingFee = specialty.bookingFee || 0;
-    const sessionFee = specialty.sessionFee || 0;
+    const bookingFee = parseFloat(specialty.bookingFee || 0);
+    const sessionFee = parseFloat(specialty.sessionFee || 0);
+
+    // Calculate convenience fee
+    const convenienceFeePercentage = paymentConfig.paychangu.convenienceFeePercentage;
+    const bookingConvenienceFee = Math.round((bookingFee * convenienceFeePercentage) / 100);
+    const totalBookingAmount = parseFloat((bookingFee + bookingConvenienceFee).toFixed(2));
 
     // Generate unique transaction reference
     const tx_ref = `HC-BOOKING-${timeSlotId}-${Date.now()}`;
 
-    // Use booking fee for initial payment
-    const paymentAmount = bookingFee;
+    // Use total booking fee for initial payment (including convenience fee)
+    const paymentAmount = totalBookingAmount;
     const paymentType = 'booking_fee';
 
     // Paychangu API payload - matching working test format
@@ -93,6 +98,12 @@ const initiateBookingPayment = async (bookingData, customerDetails, pendingBooki
           caregiverId,
           bookingFee,
           sessionFee
+        },
+        feeBreakdown: {
+          baseFee: bookingFee,
+          convenienceFee: bookingConvenienceFee,
+          convenienceFeePercentage: convenienceFeePercentage,
+          totalAmount: totalBookingAmount
         }
       }
     });
@@ -222,10 +233,21 @@ const processWebhook = async (webhookData, signature) => {
 
         appointment = newAppointment;
 
+        // Extract fee breakdown from metadata
+        const feeBreakdown = pendingTransaction.metadata?.feeBreakdown || {};
+
         // Transfer pending payment to actual PaymentTransaction table
         const actualTransaction = await PaymentTransaction.create({
           appointmentId: appointment.id,
           amount: pendingTransaction.amount,
+          baseFee: feeBreakdown.baseFee || null,
+          taxRate: feeBreakdown.taxRate || null,
+          taxAmount: feeBreakdown.taxAmount || null,
+          convenienceFeeRate: feeBreakdown.convenienceFeeRate || feeBreakdown.convenienceFeePercentage || null,
+          convenienceFeeAmount: feeBreakdown.convenienceFeeAmount || feeBreakdown.convenienceFee || null,
+          platformCommissionRate: feeBreakdown.platformCommissionRate || null,
+          platformCommissionAmount: feeBreakdown.platformCommissionAmount || null,
+          caregiverEarnings: feeBreakdown.caregiverEarnings || null,
           currency: pendingTransaction.currency,
           paymentMethod: pendingTransaction.paymentMethod,
           paymentType: pendingTransaction.paymentType,
@@ -241,51 +263,70 @@ const processWebhook = async (webhookData, signature) => {
         }, { transaction: t });
 
         logger.info(`Pending payment ${pendingTransaction.id} converted to payment ${actualTransaction.id}`);
-      } else {
+      } else if (pendingTransaction.appointmentId) {
         // Handle session fee payment for existing appointment
-        const transaction = await PaymentTransaction.findOne({
-          where: { stripePaymentIntentId: tx_ref },
-          transaction: t
-        });
+        logger.info(`Processing session fee payment for appointment ${pendingTransaction.appointmentId}`);
 
-        if (transaction && transaction.appointmentId) {
-          // Update existing appointment payment status for session fee
-          const { APPOINTMENT_STATUS } = require('../utils/constants');
-          appointment = await Appointment.findByPk(transaction.appointmentId, { transaction: t });
+        appointment = await Appointment.findByPk(pendingTransaction.appointmentId, { transaction: t });
 
-          if (appointment) {
-            const paymentType = transaction.paymentType || 'session_fee';
-
-            if (paymentType === 'session_fee') {
-              const overallPaymentStatus = appointment.bookingFeeStatus === PAYMENT_STATUS.COMPLETED ? 'completed' : 'partial';
-              const appointmentStatus = overallPaymentStatus === 'completed' ? 'session_attended' : 'session_waiting';
-
-              const { QueryTypes } = require('sequelize');
-              const currentTime = new Date();
-
-              await sequelize.query(
-                `UPDATE appointments SET
-                 session_fee_status = 'completed',
-                 session_paid_at = ?,
-                 paymentStatus = ?,
-                 status = ?
-                 WHERE id = ?`,
-                {
-                  replacements: [currentTime, overallPaymentStatus, appointmentStatus, appointment.id],
-                  type: QueryTypes.UPDATE,
-                  transaction: t
-                }
-              );
-
-              // Update transaction status
-              transaction.status = PAYMENT_STATUS.COMPLETED;
-              transaction.paidAt = new Date();
-              await transaction.save({ transaction: t });
-
-              logger.info(`Session fee payment completed for appointment ${appointment.id}`);
-            }
-          }
+        if (!appointment) {
+          throw new Error(`Appointment ${pendingTransaction.appointmentId} not found for session fee payment`);
         }
+
+        // Calculate overall payment status
+        const overallPaymentStatus = appointment.bookingFeeStatus === PAYMENT_STATUS.COMPLETED ? 'completed' : 'partial';
+
+        // Update appointment session fee status and mark as attended
+        const { QueryTypes } = require('sequelize');
+        const currentTime = new Date();
+
+        await sequelize.query(
+          `UPDATE appointments SET
+           session_fee_status = 'completed',
+           session_paid_at = ?,
+           paymentStatus = ?,
+           status = 'session_attended'
+           WHERE id = ?`,
+          {
+            replacements: [currentTime, overallPaymentStatus, appointment.id],
+            type: QueryTypes.UPDATE,
+            transaction: t
+          }
+        );
+
+        // Extract fee breakdown from metadata
+        const sessionFeeBreakdown = pendingTransaction.metadata?.feeBreakdown || {};
+
+        // Create actual PaymentTransaction record
+        const actualTransaction = await PaymentTransaction.create({
+          appointmentId: appointment.id,
+          amount: pendingTransaction.amount,
+          baseFee: sessionFeeBreakdown.baseFee || null,
+          taxRate: sessionFeeBreakdown.taxRate || null,
+          taxAmount: sessionFeeBreakdown.taxAmount || null,
+          convenienceFeeRate: sessionFeeBreakdown.convenienceFeeRate || sessionFeeBreakdown.convenienceFeePercentage || null,
+          convenienceFeeAmount: sessionFeeBreakdown.convenienceFeeAmount || sessionFeeBreakdown.convenienceFee || null,
+          platformCommissionRate: sessionFeeBreakdown.platformCommissionRate || null,
+          platformCommissionAmount: sessionFeeBreakdown.platformCommissionAmount || null,
+          caregiverEarnings: sessionFeeBreakdown.caregiverEarnings || null,
+          currency: pendingTransaction.currency,
+          paymentMethod: pendingTransaction.paymentMethod,
+          paymentType: 'session_fee',
+          stripePaymentIntentId: pendingTransaction.tx_ref,
+          status: PAYMENT_STATUS.COMPLETED,
+          paidAt: pendingTransaction.paidAt,
+          metadata: pendingTransaction.metadata
+        }, { transaction: t });
+
+        // Mark pending transaction as converted
+        await pendingTransaction.update({
+          convertedToPaymentId: actualTransaction.id
+        }, { transaction: t });
+
+        logger.info(`Session fee payment ${actualTransaction.id} completed for appointment ${appointment.id}`);
+      } else {
+        // Invalid pending transaction state
+        throw new Error(`Invalid pending transaction: missing both pendingBookingId and appointmentId for tx_ref ${tx_ref}`);
       }
 
       // Commit transaction before sending emails
@@ -430,90 +471,8 @@ const getAppointmentPayments = async (appointmentId) => {
   }
 };
 
-/**
- * Initialize Paychangu Payment (Legacy - for existing appointments)
- * Creates a payment request and returns checkout URL
- */
-const initiatePayment = async (appointmentId, customerDetails, paymentType = 'booking_fee', customAmount = null) => {
-  try {
-    const appointment = await Appointment.findByPk(appointmentId);
-    if (!appointment) {
-      throw new Error('Appointment not found');
-    }
-
-    // Generate unique transaction reference
-    const tx_ref = `HC-${appointmentId}-${Date.now()}`;
-
-    // Determine payment amount based on payment type
-    let paymentAmount;
-    if (paymentType === 'session_fee') {
-      paymentAmount = customAmount || appointment.sessionFee;
-    } else {
-      paymentAmount = customAmount || appointment.bookingFee || appointment.totalCost;
-    }
-    
-    // Paychangu API payload
-    const paymentData = {
-      amount: paymentAmount,
-      currency: paymentConfig.paychangu.currency,
-      email: customerDetails.email,
-      first_name: customerDetails.firstName,
-      last_name: customerDetails.lastName,
-      phone_number: customerDetails.phone,
-      callback_url: `${paymentConfig.paychangu.webhookBaseUrl}/api/payments/webhook`,
-      return_url: `${process.env.FRONTEND_URL}/dashboard/billing?status=success`,
-      tx_ref: tx_ref,
-      customization: {
-        title: 'Home Care System',
-        description: `Booking Fee for Appointment #${appointmentId}`
-      }
-    };
-
-    // Call Paychangu API
-    const response = await axios.post(
-      `${paymentConfig.paychangu.apiUrl}/payment`,
-      paymentData,
-      {
-        headers: {
-          'Accept': 'application/json',
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${paymentConfig.paychangu.secretKey}`
-        }
-      }
-    );
-
-    // Create payment transaction record
-    const transaction = await PaymentTransaction.create({
-      appointmentId,
-      amount: paymentAmount,
-      currency: paymentConfig.paychangu.currency,
-      paymentMethod: 'paychangu',
-      stripePaymentIntentId: tx_ref,
-      status: PAYMENT_STATUS.PENDING,
-      paymentType: paymentType,
-      metadata: {
-        checkout_url: response.data.data?.checkout_url,
-        tx_ref: response.data.data?.data?.tx_ref || tx_ref,
-        mode: response.data.data?.data?.mode,
-        paymentType: paymentType
-      }
-    });
-
-    return {
-      transaction,
-      checkoutUrl: response.data.data.checkout_url,
-      tx_ref: response.data.data.data.tx_ref,
-      status: response.data.status
-    };
-  } catch (error) {
-    logger.error('Payment initiation failed:', error);
-    const errorMessage = error.response?.data?.message || error.response?.data?.error || error.message;
-    throw new Error(`Payment creation failed: ${errorMessage}`);
-  }
-};
 
 module.exports = {
-  initiatePayment,
   initiateBookingPayment,
   verifyPayment,
   processWebhook,

@@ -1,6 +1,7 @@
 const { Specialty, Appointment, PaymentTransaction, Caregiver, User } = require('../models');
 const { Op } = require('sequelize');
 const sequelize = require('../config/database');
+const paymentConfig = require('../config/payment');
 
 // Get all specialties (including inactive for admin)
 const getSpecialties = async (req, res, next) => {
@@ -56,9 +57,16 @@ const getSpecialties = async (req, res, next) => {
       order: [['name', 'ASC']]
     });
 
+    // Add convenience fee percentage and tax rate to all specialties
+    const specialtiesWithConvenience = specialties.map(s => ({
+      ...s.toJSON(),
+      convenienceFeePercentage: paymentConfig.paychangu.convenienceFeePercentage,
+      taxRate: paymentConfig.paychangu.taxRate
+    }));
+
     res.json({
       success: true,
-      specialties
+      specialties: specialtiesWithConvenience
     });
   } catch (error) {
     next(error);
@@ -79,9 +87,17 @@ const getSpecialtyById = async (req, res, next) => {
       });
     }
 
+    // Add convenience fee percentage and tax rate from payment config
+    const paymentConfig = require('../config/payment');
+    const specialtyWithConvenience = {
+      ...specialty.toJSON(),
+      convenienceFeePercentage: paymentConfig.paychangu.convenienceFeePercentage,
+      taxRate: paymentConfig.paychangu.taxRate
+    };
+
     res.json({
       success: true,
-      specialty
+      specialty: specialtyWithConvenience
     });
   } catch (error) {
     next(error);
