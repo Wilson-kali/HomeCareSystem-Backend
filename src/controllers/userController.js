@@ -64,6 +64,11 @@ const updateProfile = async (req, res, next) => {
       dateOfBirth,
       address,
       emergencyContact,
+      bio,
+      region,
+      district,
+      traditionalAuthority,
+      village,
       ...otherData 
     } = req.body;
     const uploadedFiles = req.files || {};
@@ -94,16 +99,28 @@ const updateProfile = async (req, res, next) => {
       await user.Patient.update(patientData);
     }
 
-    // Update caregiver profile image
-    if (user.Role.name === 'caregiver' && user.Caregiver && uploadedFiles.profileImage) {
-      try {
-        const { uploadToCloudinary } = require('../services/cloudinaryService');
-        const uploadResult = await uploadToCloudinary(uploadedFiles.profileImage[0], 'caregiver-profiles');
-        await user.Caregiver.update({
-          profileImage: uploadResult.url
-        });
-      } catch (uploadError) {
-        console.error('Profile image upload failed:', uploadError);
+    // Update caregiver-specific data
+    if (user.Role.name === 'caregiver' && user.Caregiver) {
+      const caregiverData = {};
+      if (bio !== undefined) caregiverData.bio = bio;
+      if (region) caregiverData.region = region;
+      if (district) caregiverData.district = district;
+      if (traditionalAuthority) caregiverData.traditionalAuthority = traditionalAuthority;
+      if (village) caregiverData.village = village;
+      
+      await user.Caregiver.update(caregiverData);
+      
+      // Handle profile image upload
+      if (uploadedFiles.profileImage) {
+        try {
+          const { uploadToCloudinary } = require('../services/cloudinaryService');
+          const uploadResult = await uploadToCloudinary(uploadedFiles.profileImage[0], 'caregiver-profiles');
+          await user.Caregiver.update({
+            profileImage: uploadResult.url
+          });
+        } catch (uploadError) {
+          console.error('Profile image upload failed:', uploadError);
+        }
       }
     }
 
