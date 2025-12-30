@@ -715,6 +715,100 @@ const autoCleanupDueBookings = async (req, res, next) => {
   }
 };
 
+/**
+ * Get Jitsi meeting details for a teleconference appointment
+ * GET /api/appointments/:id/jitsi
+ */
+const getJitsiMeetingDetails = async (req, res, next) => {
+  try {
+    const appointment = await Appointment.findByPk(req.params.id, {
+      include: [
+        { model: Patient, include: [{ model: User }] },
+        { model: Caregiver, include: [{ model: User }] },
+        { model: Specialty }
+      ]
+    });
+
+    if (!appointment) {
+      return res.status(404).json({ error: 'Appointment not found' });
+    }
+
+    // Check if appointment is a teleconference
+    if (appointment.sessionType !== 'teleconference' && appointment.sessionType !== 'video') {
+      return res.status(400).json({
+        error: 'This appointment is not a teleconference session',
+        sessionType: appointment.sessionType
+      });
+    }
+
+    // Check if Jitsi link exists
+    if (!appointment.jitsiRoomName || !appointment.jitsiMeetingUrl) {
+      return res.status(404).json({
+        error: 'Jitsi meeting link not found for this appointment',
+        message: 'The meeting link may not have been generated yet'
+      });
+    }
+
+    // Verify user has access to this appointment
+    const { Caregiver: CaregiverModel } = require('../models');
+    const userRole = req.user.role;
+
+    if (userRole === USER_ROLES.PATIENT) {
+      const patient = await Patient.findOne({ where: { userId: req.user.id } });
+      if (appointment.patientId !== patient.id) {
+        return res.status(403).json({ error: 'Access denied to this appointment' });
+      }
+    } else if (userRole === USER_ROLES.CAREGIVER) {
+      const caregiver = await CaregiverModel.findOne({ where: { userId: req.user.id } });
+      if (appointment.caregiverId !== caregiver.id) {
+        return res.status(403).json({ error: 'Access denied to this appointment' });
+      }
+    }
+
+    // Check if meeting is currently accessible
+    const { canJoinMeeting } = require('../services/jitsiService');
+    const accessCheck = canJoinMeeting(
+      appointment.scheduledDate,
+      appointment.duration || 60 // Default 60 minutes if not set
+    );
+
+    // Return Jitsi meeting details
+    res.json({
+      appointmentId: appointment.id,
+      sessionType: appointment.sessionType,
+      scheduledDate: appointment.scheduledDate,
+      duration: appointment.duration,
+      status: appointment.status,
+      jitsi: {
+        roomName: appointment.jitsiRoomName,
+        meetingUrl: appointment.jitsiMeetingUrl,
+        access: {
+          canJoin: accessCheck.canJoin,
+          status: accessCheck.status,
+          message: accessCheck.message,
+          availableAt: accessCheck.availableAt,
+          expiresAt: accessCheck.expiresAt,
+          timeUntilExpiry: accessCheck.timeUntilExpiry || null
+        }
+      },
+      participants: {
+        patient: {
+          id: appointment.Patient.id,
+          name: `${appointment.Patient.User.firstName} ${appointment.Patient.User.lastName}`,
+          email: appointment.Patient.User.email
+        },
+        caregiver: {
+          id: appointment.Caregiver.id,
+          name: `${appointment.Caregiver.User.firstName} ${appointment.Caregiver.User.lastName}`,
+          specialty: appointment.Specialty.name
+        }
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createAppointment,
   getAppointments,
@@ -726,5 +820,6 @@ module.exports = {
   markAppointmentCompleted,
   rescheduleAppointment,
   cancelAppointment,
-  autoCleanupDueBookings
+  autoCleanupDueBookings,
+  getJitsiMeetingDetails
 };

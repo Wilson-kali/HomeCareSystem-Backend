@@ -181,13 +181,12 @@ const register = async (req, res, next) => {
     
     // Send appropriate response based on role
     if (role === 'caregiver') {
-      // Send email notification to caregiver
-      try {
-        const emailService = require('../services/emailService');
-        await emailService.sendCaregiverRegistrationNotification(createdUser.email, createdUser.firstName);
-      } catch (emailError) {
-        console.error('Failed to send registration email:', emailError);
-      }
+      // Queue email notification to caregiver
+      const EmailScheduler = require('../services/emailScheduler');
+      await EmailScheduler.queueEmail(createdUser.email, 'caregiver_registration', {
+        email: createdUser.email,
+        firstName: createdUser.firstName
+      });
       
       res.status(201).json({
         message: 'Registration submitted. Please wait for admin approval.',
@@ -290,10 +289,17 @@ const registerAdmin = async (req, res, next) => {
 const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
+    const { Permission } = require('../models');
 
     const user = await User.findOne({ 
       where: { email },
-      include: [{ model: Role }]
+      include: [{
+        model: Role,
+        include: [{
+          model: Permission,
+          through: { attributes: [] }
+        }]
+      }]
     });
     if (!user || !user.isActive) {
       return res.status(401).json({ error: 'Invalid credentials' });
@@ -305,11 +311,15 @@ const login = async (req, res, next) => {
     }
 
     const token = generateToken(user.id);
+    const sanitizedUser = sanitizeUser(user);
+    
+    // Add permissions to user object
+    sanitizedUser.permissions = user.Role?.Permissions?.map(p => p.name) || [];
     
     res.json({
       message: 'Login successful',
       token,
-      user: sanitizeUser(user)
+      user: sanitizedUser
     });
   } catch (error) {
     next(error);
@@ -318,16 +328,29 @@ const login = async (req, res, next) => {
 
 const getProfile = async (req, res, next) => {
   try {
+    const { Permission } = require('../models');
+    
     const user = await User.findByPk(req.user.id, {
       include: [
-        { model: Role, attributes: ['name'] },
+        { 
+          model: Role, 
+          attributes: ['name'],
+          include: [{
+            model: Permission,
+            through: { attributes: [] }
+          }]
+        },
         { model: Patient, required: false },
         { model: Caregiver, required: false },
         { model: PrimaryPhysician, required: false }
       ]
     });
 
-    res.json({ user: sanitizeUser(user) });
+    const sanitizedUser = sanitizeUser(user);
+    // Add permissions to user object
+    sanitizedUser.permissions = user.Role?.Permissions?.map(p => p.name) || [];
+
+    res.json({ user: sanitizedUser });
   } catch (error) {
     next(error);
   }
@@ -362,20 +385,15 @@ const forgotPassword = async (req, res, next) => {
 
     console.log('💾 Token saved to database');
 
-    // Send email with reset link
-    try {
-      const emailService = require('../services/emailService');
-      const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
-      
-      console.log('🔗 Reset URL:', resetUrl);
-      console.log('📧 Sending email to:', user.email);
-      
-      await emailService.sendPasswordResetEmail(user.email, user.firstName, resetUrl);
-      console.log('✅ Password reset email sent successfully!');
-    } catch (emailError) {
-      console.error('💥 Failed to send password reset email:', emailError);
-      return res.status(500).json({ error: 'Failed to send reset email' });
-    }
+    // Queue email with reset link
+    const EmailScheduler = require('../services/emailScheduler');
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+    
+    await EmailScheduler.queueEmail(user.email, 'password_reset', {
+      email: user.email,
+      firstName: user.firstName,
+      resetUrl
+    });
 
     res.json({ message: 'Password reset email sent successfully' });
   } catch (error) {

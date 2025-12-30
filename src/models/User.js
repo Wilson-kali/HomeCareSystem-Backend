@@ -51,6 +51,10 @@ const User = sequelize.define('User', {
   resetPasswordExpires: {
     type: DataTypes.DATE,
     allowNull: true
+  },
+  assignedRegion: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 }, {
   tableName: 'users'

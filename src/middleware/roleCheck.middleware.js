@@ -19,7 +19,7 @@ const requireRole = (roles) => {
 const requirePatient = requireRole(USER_ROLES.PATIENT);
 const requireCaregiver = requireRole(USER_ROLES.CAREGIVER);
 const requirePhysician = requireRole(USER_ROLES.PRIMARY_PHYSICIAN);
-const requireAdmin = requireRole([USER_ROLES.SYSTEM_MANAGER, USER_ROLES.REGIONAL_MANAGER]);
+const requireAdmin = requireRole([USER_ROLES.SYSTEM_MANAGER, USER_ROLES.REGIONAL_MANAGER, 'Accountant']);
 
 module.exports = {
   requireRole,

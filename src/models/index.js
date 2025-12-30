@@ -19,6 +19,7 @@ const CaregiverAvailability = require('./CaregiverAvailability');
 const Location = require('./Location');
 const PendingBooking = require('./PendingBooking');
 const PendingPaymentTransaction = require('./PendingPaymentTransaction');
+const EmailQueue = require('./EmailQueue');
 
 // Define associations
 // User-Role association
@@ -141,5 +142,6 @@ module.exports = {
   CaregiverAvailability,
   Location,
   PendingBooking,
-  PendingPaymentTransaction
+  PendingPaymentTransaction,
+  EmailQueue
 };

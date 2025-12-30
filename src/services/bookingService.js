@@ -2,6 +2,7 @@ const { TimeSlot, Appointment, Caregiver, PendingBooking, Specialty, sequelize }
 const { TIMESLOT_STATUS, APPOINTMENT_STATUS, PAYMENT_STATUS } = require('../utils/constants');
 const { Op } = require('sequelize');
 const logger = require('../utils/logger');
+const { generateJitsiMeeting } = require('./jitsiService');
 
 class BookingService {
   async lockSlotForBooking(timeSlotId, lockDurationMinutes = 10) {
@@ -203,8 +204,8 @@ class BookingService {
         throw new Error('Time slot not found');
       }
 
-      // Create appointment
-      const appointment = await Appointment.create({
+      // Prepare appointment data
+      const appointmentData = {
         patientId: pendingBooking.patientId,
         caregiverId: pendingBooking.caregiverId,
         specialtyId: pendingBooking.specialtyId,
@@ -222,7 +223,31 @@ class BookingService {
         sessionFeeStatus: PAYMENT_STATUS.PENDING,
         paymentStatus: 'partial',
         bookedAt: new Date()
-      }, { transaction: t });
+      };
+
+      // Create appointment first to get the ID
+      const appointment = await Appointment.create(appointmentData, { transaction: t });
+
+      // Generate Jitsi meeting link if this is a teleconference appointment
+      if (pendingBooking.sessionType === 'teleconference' || pendingBooking.sessionType === 'video') {
+        const jitsiMeeting = generateJitsiMeeting(
+          appointment.id,
+          pendingBooking.patientId,
+          pendingBooking.caregiverId
+        );
+
+        // Update appointment with Jitsi details
+        await appointment.update({
+          jitsiRoomName: jitsiMeeting.roomName,
+          jitsiMeetingUrl: jitsiMeeting.meetingUrl
+        }, { transaction: t });
+
+        logger.info('Jitsi meeting created for appointment', {
+          appointmentId: appointment.id,
+          roomName: jitsiMeeting.roomName,
+          meetingUrl: jitsiMeeting.meetingUrl
+        });
+      }
 
       // Update pending booking status
       await pendingBooking.update({

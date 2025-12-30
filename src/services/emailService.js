@@ -737,6 +737,99 @@ const sendCancellationNotification = async (recipientEmail, recipientName, appoi
   return sendEmail(recipientEmail, subject, html);
 };
 
+const sendUserWelcomeEmail = async (userDetails) => {
+  const systemName = process.env.SYSTEM || 'CareConnect';
+  const subject = `Welcome to ${systemName} - Account Created`;
+  const { email, firstName, lastName, password, role, assignedRegion } = userDetails;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 20px auto; background: white; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; background: #f0f8ff; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: #1976d2; }
+        .content { padding: 30px 20px; }
+        .credentials-box { padding: 20px; border: 2px solid #1976d2; border-radius: 4px; margin: 20px 0; background: #f0f8ff; }
+        .detail-row { padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+        .detail-row:last-child { border-bottom: none; }
+        .detail-row strong { display: inline-block; min-width: 120px; color: #1a1a1a; font-weight: 600; }
+        .password { font-family: monospace; background: #f5f5f5; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+        .button { display: inline-block; background: #1976d2; color: white !important; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 20px 0; font-size: 14px; font-weight: 500; }
+        .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 4px; margin: 20px 0; }
+        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🎉 Welcome to ${systemName}</h1>
+        </div>
+        <div class="content">
+          <p>Dear ${firstName} ${lastName},</p>
+          <p>Your account has been successfully created by the system administrator. Below are your login credentials and account details:</p>
+
+          <div class="credentials-box">
+            <div class="detail-row">
+              <strong>Email:</strong>
+              <span>${email}</span>
+            </div>
+            <div class="detail-row">
+              <strong>Password:</strong>
+              <span class="password">${password}</span>
+            </div>
+            <div class="detail-row">
+              <strong>Role:</strong>
+              <span>${role.replace('_', ' ').toUpperCase()}</span>
+            </div>
+            ${assignedRegion && assignedRegion !== 'All regions' ? `
+            <div class="detail-row">
+              <strong>Assigned Region:</strong>
+              <span>${assignedRegion}</span>
+            </div>
+            ` : ''}
+            <div class="detail-row">
+              <strong>Account Created:</strong>
+              <span>${new Date().toLocaleDateString()}</span>
+            </div>
+          </div>
+
+          <div class="warning">
+            <strong>🔒 Security Notice:</strong>
+            <p style="margin: 8px 0 0 0;">For security reasons, please change your password immediately after your first login. Keep your credentials secure and do not share them with anyone.</p>
+          </div>
+
+          <p><strong>Getting Started:</strong></p>
+          <ul>
+            <li>Log in using the credentials above</li>
+            <li>Change your password in your profile settings</li>
+            <li>Complete your profile information</li>
+            <li>Familiarize yourself with the system features</li>
+          </ul>
+
+          <center>
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:8080'}/login" class="button" style="color: white !important;">Login to ${systemName}</a>
+          </center>
+
+          <p>If you have any questions or need assistance, please contact the system administrator.</p>
+
+          <p>Welcome to the team!</p>
+          <p>Best regards,<br>${systemName} Administration Team</p>
+        </div>
+        <div class="footer">
+          <p>© ${new Date().getFullYear()} ${systemName}. All rights reserved.</p>
+          <p>This email contains sensitive information. Please keep it secure.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail(email, subject, html);
+};
+
 module.exports = {
   sendEmail,
   sendAppointmentConfirmation,
@@ -749,5 +842,6 @@ module.exports = {
   sendPaymentFailureNotification,
   sendBookingExpiredNotification,
   sendRescheduleNotification,
-  sendCancellationNotification
+  sendCancellationNotification,
+  sendUserWelcomeEmail
 };

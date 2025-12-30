@@ -1,7 +1,8 @@
 const express = require('express');
-const { getPendingCaregivers, approveCaregiver, rejectCaregiver, getAllUsers } = require('../controllers/adminController');
+const { getPendingCaregivers, approveCaregiver, rejectCaregiver, getAllUsers, getUserStats, getAllRoles, updateUser, getAllPermissions, updateRolePermissions, createUser } = require('../controllers/adminController');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const { requireAdmin } = require('../middleware/roleCheck.middleware');
+const { requirePermission, requireAnyPermission } = require('../middleware/permissions');
 const { sanitizeUser } = require('../utils/helpers');
 
 const router = express.Router();
@@ -9,8 +10,64 @@ const router = express.Router();
 router.use(authenticateToken);
 router.use(requireAdmin);
 
-router.get('/caregivers/pending', getPendingCaregivers);
-router.get('/caregivers/pending-verification', async (req, res, next) => {
+router.get('/caregivers/pending', requirePermission('view_caregivers'), getPendingCaregivers);
+
+// Get caregivers with region-based access control
+router.get('/caregivers', requireAnyPermission(['view_caregivers', 'view_users']), async (req, res, next) => {
+  try {
+    const { User, Role, Caregiver, Specialty } = require('../models');
+    const { Op } = require('sequelize');
+    
+    // Get current user to check assigned region
+    const currentUser = await User.findByPk(req.user.id, {
+      include: [{ model: Role }]
+    });
+    
+    const caregiverRole = await Role.findOne({ where: { name: 'caregiver' } });
+    
+    let whereClause = {
+      role_id: caregiverRole.id,
+      isActive: true
+    };
+    
+    let caregiverWhereClause = {};
+    
+    // Apply region filtering for regional managers and accountants
+    if (currentUser.Role?.name === 'regional_manager' || currentUser.Role?.name === 'Accountant') {
+      if (currentUser.assignedRegion && currentUser.assignedRegion !== 'all') {
+        caregiverWhereClause.region = currentUser.assignedRegion;
+      }
+    }
+    
+    const caregivers = await User.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: Caregiver,
+          where: caregiverWhereClause,
+          required: true,
+          include: [
+            {
+              model: Specialty,
+              through: { attributes: [] },
+              attributes: ['id', 'name', 'description', 'sessionFee', 'bookingFee']
+            }
+          ]
+        },
+        { model: Role }
+      ],
+      order: [['createdAt', 'DESC']]
+    });
+    
+    res.json({
+      success: true,
+      caregivers: caregivers.map(sanitizeUser)
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+router.get('/caregivers/pending-verification', requirePermission('view_caregivers'), async (req, res, next) => {
   try {
     const { User, Role, Caregiver } = require('../models');
     const caregiverRole = await Role.findOne({ where: { name: 'caregiver' } });
@@ -34,9 +91,19 @@ router.get('/caregivers/pending-verification', async (req, res, next) => {
     next(error);
   }
 });
-router.put('/caregivers/:userId/approve', approveCaregiver);
-router.delete('/caregivers/:userId/reject', rejectCaregiver);
-router.get('/users', getAllUsers);
+router.put('/caregivers/:userId/approve', requirePermission('approve_caregivers'), approveCaregiver);
+router.delete('/caregivers/:userId/reject', requirePermission('approve_caregivers'), rejectCaregiver);
+router.get('/users', requireAnyPermission(['view_users', 'view_caregivers', 'view_patients', 'view_accountants', 'view_regional_managers', 'view_system_managers']), getAllUsers);
+router.post('/users', requirePermission('create_users'), createUser);
+router.get('/users/stats', requireAnyPermission(['view_users', 'view_caregivers', 'view_patients', 'view_accountants', 'view_regional_managers', 'view_system_managers']), getUserStats);
+
+// Roles Management Routes
+router.get('/roles', requireAnyPermission(['view_roles', 'create_users', 'view_caregivers', 'view_patients', 'view_accountants', 'view_regional_managers', 'view_system_managers']), getAllRoles);
+
+// Permissions Management Routes
+router.get('/permissions', requirePermission('view_permissions'), getAllPermissions);
+router.put('/roles/:roleId/permissions', requirePermission('assign_permissions'), updateRolePermissions);
+
 router.get('/reports', (req, res) => {
   res.json({
     message: 'Admin reports endpoint',
@@ -275,9 +342,15 @@ router.get('/analytics/revenue-by-specialty', async (req, res, next) => {
   }
 });
 
-router.get('/users/:userId', async (req, res, next) => {
+router.get('/users/:userId', requireAnyPermission(['view_caregivers', 'view_patients', 'view_accountants', 'view_regional_managers', 'view_system_managers']), async (req, res, next) => {
   try {
     const { User, Role, Patient, Caregiver, Specialty } = require('../models');
+    
+    // Get current user to check assigned region
+    const currentUser = await User.findByPk(req.user.id, {
+      include: [{ model: Role }]
+    });
+    
     const user = await User.findByPk(req.params.userId, {
       include: [
         { model: Role },
@@ -293,6 +366,16 @@ router.get('/users/:userId', async (req, res, next) => {
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
+    
+    // Check region access for regional managers and accountants
+    if (currentUser.Role?.name === 'regional_manager' || currentUser.Role?.name === 'Accountant') {
+      if (currentUser.assignedRegion && currentUser.assignedRegion !== 'all') {
+        const userRegion = user.Patient?.region || user.Caregiver?.region;
+        if (userRegion && userRegion !== currentUser.assignedRegion) {
+          return res.status(403).json({ error: 'Access denied - user not in your assigned region' });
+        }
+      }
+    }
 
     res.json({ user: sanitizeUser(user) });
   } catch (error) {
@@ -300,8 +383,10 @@ router.get('/users/:userId', async (req, res, next) => {
   }
 });
 
+router.put('/users/:userId', requireAnyPermission(['edit_caregivers', 'edit_patients', 'edit_accountants', 'edit_regional_managers']), updateUser);
+
 // Get caregiver appointments with patient and transaction details
-router.get('/caregivers/:caregiverId/appointments', async (req, res, next) => {
+router.get('/caregivers/:caregiverId/appointments', requirePermission('view_caregivers'), async (req, res, next) => {
   try {
     const { Appointment, Patient, User, Specialty, PaymentTransaction } = require('../models');
     const { caregiverId } = req.params;
@@ -427,14 +512,13 @@ router.put('/users/:userId/toggle-status', async (req, res, next) => {
     const wasInactive = !user.isActive;
     await user.update({ isActive: !user.isActive });
     
-    // Send approval email if caregiver is being activated
+    // Queue approval email if caregiver is being activated
     if (wasInactive && user.isActive && user.Role?.name === 'caregiver') {
-      try {
-        const emailService = require('../services/emailService');
-        await emailService.sendCaregiverApprovalNotification(user.email, user.firstName);
-      } catch (emailError) {
-        console.error('Failed to send activation email:', emailError);
-      }
+      const EmailScheduler = require('../services/emailScheduler');
+      await EmailScheduler.queueEmail(user.email, 'caregiver_approval', {
+        email: user.email,
+        firstName: user.firstName
+      });
     }
     
     res.json({ 

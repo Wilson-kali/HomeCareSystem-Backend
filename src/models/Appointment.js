@@ -146,6 +146,18 @@ const Appointment = sequelize.define('Appointment', {
     allowNull: true,
     field: 'cancelled_by',
     comment: 'Who cancelled the appointment'
+  },
+  jitsiRoomName: {
+    type: DataTypes.STRING(255),
+    allowNull: true,
+    field: 'jitsi_room_name',
+    comment: 'Jitsi meeting room name for teleconference appointments'
+  },
+  jitsiMeetingUrl: {
+    type: DataTypes.STRING(500),
+    allowNull: true,
+    field: 'jitsi_meeting_url',
+    comment: 'Full Jitsi meeting URL for teleconference appointments'
   }
 }, {
   tableName: 'appointments'

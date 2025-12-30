@@ -13,6 +13,7 @@ const routes = require('./routes');
 const { errorHandler } = require('./middleware/errorHandler.middleware');
 const logger = require('./utils/logger');
 const cleanupService = require('./services/cleanupService');
+const { startEmailProcessor } = require('./jobs/emailProcessor');
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, '..', 'uploads');
@@ -72,6 +73,10 @@ async function startServer() {
     // Start cleanup service for expired bookings and locked slots
     cleanupService.startCleanupJob();
     logger.info('🧹 Cleanup service started (expired bookings: every 5 minutes, overdue appointments: every hour)');
+
+    // Start email processor
+    startEmailProcessor();
+    logger.info('📧 Email processor started');
 
     // Start server
     server.listen(PORT, () => {

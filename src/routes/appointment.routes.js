@@ -11,7 +11,8 @@ const {
   markAppointmentCompleted,
   rescheduleAppointment,
   cancelAppointment,
-  autoCleanupDueBookings
+  autoCleanupDueBookings,
+  getJitsiMeetingDetails
 } = require('../controllers/appointmentController');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const { handleValidationErrors } = require('../middleware/validator.middleware');
@@ -56,6 +57,7 @@ router.get('/caregiver', async (req, res, next) => {
   }
 });
 router.get('/:id', getAppointmentById);
+router.get('/:id/jitsi', getJitsiMeetingDetails);
 router.patch('/:id/status', updateAppointmentStatus);
 router.post('/confirm-payment', confirmPayment);
 router.post('/pay-session-fee', paySessionFee);

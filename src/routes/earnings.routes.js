@@ -1,5 +1,6 @@
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth.middleware');
+const { requirePermission } = require('../middleware/permissions');
 const { PaymentTransaction, Appointment, Patient, User, Caregiver, Specialty } = require('../models');
 const { Op } = require('sequelize');
 
@@ -8,13 +9,26 @@ const router = express.Router();
 router.use(authenticateToken);
 
 // Get earnings for admin (all platform earnings)
-router.get('/admin', async (req, res, next) => {
+router.get('/admin', requirePermission('view_financial_reports'), async (req, res, next) => {
   try {
     const { period = 'this-month', caregiverId, region, district, traditionalAuthority, village, patientSearch, startDate, endDate, page = 1, limit = 100 } = req.query;
     
-    // Check if user is admin
-    if (req.user.role !== 'system_manager' && req.user.role !== 'regional_manager') {
+    // Check if user has permission and role
+    if (!['system_manager', 'regional_manager', 'Accountant'].includes(req.user.role)) {
       return res.status(403).json({ error: 'Access denied. Admin role required.' });
+    }
+
+    // Get user's assigned region for filtering
+    let userRegionFilter = null;
+    if (req.user.role === 'regional_manager' || req.user.role === 'Accountant') {
+      // Get user's assigned region from their profile
+      const userProfile = req.user.role === 'regional_manager' 
+        ? await User.findByPk(req.user.id, { attributes: ['assignedRegion'] })
+        : await User.findByPk(req.user.id, { attributes: ['assignedRegion'] });
+      
+      if (userProfile?.assignedRegion && userProfile.assignedRegion !== 'all') {
+        userRegionFilter = userProfile.assignedRegion;
+      }
     }
 
     // Get date range based on period or custom dates
@@ -58,17 +72,28 @@ router.get('/admin', async (req, res, next) => {
 
     const appointmentWhere = {};
     const caregiverWhere = {};
+    const patientWhere = {};
     const patientUserWhere = {};
+
+    // Apply region filtering - only filter caregivers by user's assigned region
+    if (userRegionFilter) {
+      // User is restricted to a specific region - only filter caregivers
+      caregiverWhere.region = userRegionFilter;
+      // Don't filter patients by region - allow any patient who worked with caregivers in this region
+    } else {
+      // User has 'all' regions access (system_manager or assignedRegion='all')
+      if (region && region !== 'all') {
+        caregiverWhere.region = region;
+        patientWhere.region = region;
+      }
+      // No region filter applied if region is 'all' or not specified
+    }
 
     // Filter by caregiver
     if (caregiverId && caregiverId !== 'all') {
       appointmentWhere.caregiverId = caregiverId;
     }
-
-    // Filter by location (region, district, traditional authority, village)
-    if (region && region !== 'all') {
-      caregiverWhere.region = region;
-    }
+    
     if (district && district !== 'all') {
       caregiverWhere.district = district;
     }
@@ -101,7 +126,8 @@ router.get('/admin', async (req, res, next) => {
           include: [
             {
               model: Patient,
-              required: Object.keys(patientUserWhere).length > 0,
+              required: Object.keys(patientUserWhere).length > 0 || Object.keys(patientWhere).length > 0,
+              where: Object.keys(patientWhere).length > 0 ? patientWhere : undefined,
               include: [{ 
                 model: User, 
                 attributes: ['firstName', 'lastName', 'email', 'phone'],
@@ -330,23 +356,31 @@ router.get('/caregiver', async (req, res, next) => {
 // Search caregivers by name or email
 router.get('/caregivers/search', async (req, res, next) => {
   try {
-    const { q } = req.query;
+    const { q, region } = req.query;
     
     if (!q || q.length < 2) {
       return res.json({ caregivers: [] });
     }
 
+    const whereConditions = {
+      [Op.or]: [
+        { firstName: { [Op.iLike]: `%${q}%` } },
+        { lastName: { [Op.iLike]: `%${q}%` } },
+        { email: { [Op.iLike]: `%${q}%` } }
+      ]
+    };
+
+    const caregiverWhere = {};
+    if (region) {
+      caregiverWhere.region = region;
+    }
+
     const caregivers = await Caregiver.findAll({
+      where: Object.keys(caregiverWhere).length > 0 ? caregiverWhere : undefined,
       include: [{
         model: User,
         attributes: ['firstName', 'lastName', 'email'],
-        where: {
-          [Op.or]: [
-            { firstName: { [Op.iLike]: `%${q}%` } },
-            { lastName: { [Op.iLike]: `%${q}%` } },
-            { email: { [Op.iLike]: `%${q}%` } }
-          ]
-        }
+        where: whereConditions
       }],
       limit: 20
     });
