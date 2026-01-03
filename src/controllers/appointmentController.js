@@ -497,23 +497,34 @@ const rescheduleAppointment = async (req, res, next) => {
       const patientEmail = appointment.Patient.User.email;
       const caregiverEmail = appointment.Caregiver.User.email;
       const newDateTime = `${new Date(newTimeSlot.date).toLocaleDateString()} at ${newTimeSlot.startTime}`;
-      
-      // Send email to patient
+
+      // Construct magic links for each participant
+      const appUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+      const patientMeetingUrl = appointment.patientMeetingToken
+        ? `${appUrl}/meeting/join/${appointment.patientMeetingToken}`
+        : null;
+      const caregiverMeetingUrl = appointment.caregiverMeetingToken
+        ? `${appUrl}/meeting/join/${appointment.caregiverMeetingToken}`
+        : null;
+
+      // Send email to patient with their magic link
       await emailService.sendRescheduleNotification(
         patientEmail,
         appointment.Patient.User.firstName,
         rescheduleBy,
         rescheduleBy === 'patient' ? `${appointment.Patient.User.firstName} ${appointment.Patient.User.lastName}` : `${appointment.Caregiver.User.firstName} ${appointment.Caregiver.User.lastName}`,
-        newDateTime
+        newDateTime,
+        patientMeetingUrl
       );
-      
-      // Send email to caregiver
+
+      // Send email to caregiver with their magic link
       await emailService.sendRescheduleNotification(
         caregiverEmail,
         appointment.Caregiver.User.firstName,
         rescheduleBy,
         rescheduleBy === 'patient' ? `${appointment.Patient.User.firstName} ${appointment.Patient.User.lastName}` : `${appointment.Caregiver.User.firstName} ${appointment.Caregiver.User.lastName}`,
-        newDateTime
+        newDateTime,
+        caregiverMeetingUrl
       );
     } catch (emailError) {
       console.error('Failed to send reschedule notification:', emailError);

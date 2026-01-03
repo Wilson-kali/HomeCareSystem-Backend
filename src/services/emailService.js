@@ -59,7 +59,10 @@ const sendAppointmentConfirmation = async (patientEmail, appointmentDetails) => 
         .detail-row { padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
         .detail-row:last-child { border-bottom: none; }
         .detail-row strong { display: inline-block; min-width: 120px; color: #1a1a1a; font-weight: 600; }
-        .button { display: inline-block; background: #1a1a1a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 20px 0; font-size: 14px; font-weight: 500; }
+        .button { display: inline-block; background: #1a1a1a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 10px 5px; font-size: 14px; font-weight: 500; }
+        .video-button { background: #047857; }
+        .video-box { padding: 20px; border: 2px solid #047857; border-radius: 8px; margin: 20px 0; background: #f0fdf4; }
+        .video-link { word-break: break-all; color: #047857; font-size: 13px; font-family: monospace; }
         .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
       </style>
     </head>
@@ -92,6 +95,22 @@ const sendAppointmentConfirmation = async (patientEmail, appointmentDetails) => 
             </div>
             ` : ''}
           </div>
+
+          ${appointmentDetails.jitsiMeetingUrl ? `
+          <div class="video-box">
+            <h3 style="margin: 0 0 15px 0; color: #047857; font-size: 18px;">🎥 Video Consultation Link</h3>
+            <p style="margin: 0 0 10px 0; font-size: 14px;">Join your video consultation at the scheduled time using the link below:</p>
+            <center>
+              <a href="${appointmentDetails.jitsiMeetingUrl}" class="button video-button" style="color: white !important;">Join Video Call</a>
+            </center>
+            <p style="margin: 15px 0 0 0; font-size: 12px; color: #666;">
+              <strong>Note:</strong> You can join the meeting 15 minutes before your scheduled appointment time.
+            </p>
+            <p style="margin: 10px 0 0 0; font-size: 11px; color: #888;">
+              Meeting Link: <span class="video-link">${appointmentDetails.jitsiMeetingUrl}</span>
+            </p>
+          </div>
+          ` : ''}
 
           <p>If you need to reschedule or cancel, please contact us at least 24 hours in advance.</p>
 
@@ -384,7 +403,10 @@ const sendPaymentConfirmation = async (patientEmail, paymentDetails) => {
         .detail-row:last-child { border-bottom: none; }
         .detail-row strong { display: inline-block; min-width: 120px; color: #1a1a1a; font-weight: 600; }
         .amount { font-size: 20px; font-weight: 600; color: #1a1a1a; }
-        .button { display: inline-block; background: #1a1a1a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 20px 0; font-size: 14px; font-weight: 500; }
+        .button { display: inline-block; background: #1a1a1a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 10px 5px; font-size: 14px; font-weight: 500; }
+        .video-button { background: #047857; }
+        .video-box { padding: 20px; border: 2px solid #047857; border-radius: 8px; margin: 20px 0; background: #f0fdf4; }
+        .video-link { word-break: break-all; color: #047857; font-size: 13px; font-family: monospace; }
         .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
       </style>
     </head>
@@ -419,6 +441,22 @@ const sendPaymentConfirmation = async (patientEmail, paymentDetails) => {
               <span>${paymentDetails.caregiverName}</span>
             </div>
           </div>
+
+          ${paymentDetails.jitsiMeetingUrl ? `
+          <div class="video-box">
+            <h3 style="margin: 0 0 15px 0; color: #047857; font-size: 18px;">🎥 Video Consultation Link</h3>
+            <p style="margin: 0 0 10px 0; font-size: 14px;">Your secure video consultation link is ready! Join at your appointment time:</p>
+            <center>
+              <a href="${paymentDetails.jitsiMeetingUrl}" class="button video-button" style="color: white !important;">Join Video Call</a>
+            </center>
+            <p style="margin: 15px 0 0 0; font-size: 12px; color: #666;">
+              <strong>Note:</strong> You can join the meeting 15 minutes before your scheduled appointment time.
+            </p>
+            <p style="margin: 10px 0 0 0; font-size: 11px; color: #888;">
+              Meeting Link: <span class="video-link">${paymentDetails.jitsiMeetingUrl}</span>
+            </p>
+          </div>
+          ` : ''}
 
           <p>Your appointment is confirmed and the caregiver has been notified. You will receive a reminder 24 hours before your scheduled appointment.</p>
 
@@ -605,11 +643,11 @@ const sendBookingExpiredNotification = async (patientEmail, bookingDetails) => {
   return sendEmail(patientEmail, subject, html);
 };
 
-const sendRescheduleNotification = async (recipientEmail, recipientName, rescheduleBy, rescheduleByName, newDateTime) => {
+const sendRescheduleNotification = async (recipientEmail, recipientName, rescheduleBy, rescheduleByName, newDateTime, jitsiMeetingUrl = null) => {
   const systemName = process.env.SYSTEM || 'CareConnect';
   const subject = `Appointment Rescheduled - ${systemName}`;
   const isPatient = rescheduleBy === 'patient';
-  
+
   const html = `
     <!DOCTYPE html>
     <html>
@@ -625,7 +663,10 @@ const sendRescheduleNotification = async (recipientEmail, recipientName, resched
         .detail-row:last-child { border-bottom: none; }
         .detail-row strong { display: inline-block; min-width: 120px; color: #1a1a1a; font-weight: 600; }
         .new-time { font-size: 18px; font-weight: 600; color: #1976d2; }
-        .button { display: inline-block; background: #1976d2; color: white !important; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 20px 0; font-size: 14px; font-weight: 500; }
+        .button { display: inline-block; background: #1976d2; color: white !important; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 10px 5px; font-size: 14px; font-weight: 500; }
+        .video-button { background: #047857; }
+        .video-box { padding: 20px; border: 2px solid #047857; border-radius: 8px; margin: 20px 0; background: #f0fdf4; }
+        .video-link { word-break: break-all; color: #047857; font-size: 13px; font-family: monospace; }
         .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
       </style>
     </head>
@@ -652,6 +693,22 @@ const sendRescheduleNotification = async (recipientEmail, recipientName, resched
               <span>${new Date().toLocaleString()}</span>
             </div>
           </div>
+
+          ${jitsiMeetingUrl ? `
+          <div class="video-box">
+            <h3 style="margin: 0 0 15px 0; color: #047857; font-size: 18px;">🎥 Video Consultation Link</h3>
+            <p style="margin: 0 0 10px 0; font-size: 14px;">Your video consultation link remains the same. Join at the NEW appointment time:</p>
+            <center>
+              <a href="${jitsiMeetingUrl}" class="button video-button" style="color: white !important;">Join Video Call</a>
+            </center>
+            <p style="margin: 15px 0 0 0; font-size: 12px; color: #666;">
+              <strong>Note:</strong> The link works only at the new scheduled time. You can join 15 minutes before the appointment.
+            </p>
+            <p style="margin: 10px 0 0 0; font-size: 11px; color: #888;">
+              Meeting Link: <span class="video-link">${jitsiMeetingUrl}</span>
+            </p>
+          </div>
+          ` : ''}
 
           <p>Please update your calendar with the new appointment time. If you have any concerns about this change, please contact ${isPatient ? 'your patient' : 'your caregiver'} directly.</p>
 
@@ -830,9 +887,112 @@ const sendUserWelcomeEmail = async (userDetails) => {
   return sendEmail(email, subject, html);
 };
 
+const sendCaregiverAppointmentNotification = async (caregiverEmail, appointmentDetails) => {
+  const subject = 'New Appointment Booked - Home Care System';
+  const formattedDate = new Date(appointmentDetails.scheduledDate).toLocaleString('en-US', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 20px auto; background: white; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: #1a1a1a; }
+        .content { padding: 30px 20px; }
+        .details { padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; margin: 20px 0; }
+        .detail-row { padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+        .detail-row:last-child { border-bottom: none; }
+        .detail-row strong { display: inline-block; min-width: 120px; color: #1a1a1a; font-weight: 600; }
+        .button { display: inline-block; background: #1a1a1a; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 10px 5px; font-size: 14px; font-weight: 500; }
+        .video-button { background: #047857; }
+        .video-box { padding: 20px; border: 2px solid #047857; border-radius: 8px; margin: 20px 0; background: #f0fdf4; }
+        .video-link { word-break: break-all; color: #047857; font-size: 13px; font-family: monospace; }
+        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🆕 New Appointment Scheduled</h1>
+        </div>
+        <div class="content">
+          <p>Dear ${appointmentDetails.caregiverName},</p>
+          <p>A new appointment has been booked with you. Here are the details:</p>
+
+          <div class="details">
+            <div class="detail-row">
+              <strong>Patient:</strong>
+              <span>${appointmentDetails.patientName}</span>
+            </div>
+            <div class="detail-row">
+              <strong>Date & Time:</strong>
+              <span>${formattedDate}</span>
+            </div>
+            <div class="detail-row">
+              <strong>Session Type:</strong>
+              <span>${appointmentDetails.sessionType === 'in_person' ? 'In-Person Visit' : 'Teleconference'}</span>
+            </div>
+            ${appointmentDetails.duration ? `
+            <div class="detail-row">
+              <strong>Duration:</strong>
+              <span>${appointmentDetails.duration} minutes</span>
+            </div>
+            ` : ''}
+            ${appointmentDetails.notes ? `
+            <div class="detail-row">
+              <strong>Notes:</strong>
+              <span>${appointmentDetails.notes}</span>
+            </div>
+            ` : ''}
+          </div>
+
+          ${appointmentDetails.jitsiMeetingUrl ? `
+          <div class="video-box">
+            <h3 style="margin: 0 0 15px 0; color: #047857; font-size: 18px;">🎥 Video Consultation Link</h3>
+            <p style="margin: 0 0 10px 0; font-size: 14px;">Join the video consultation at the scheduled time using your secure link:</p>
+            <center>
+              <a href="${appointmentDetails.jitsiMeetingUrl}" class="button video-button" style="color: white !important;">Join Video Call</a>
+            </center>
+            <p style="margin: 15px 0 0 0; font-size: 12px; color: #666;">
+              <strong>Note:</strong> You can join the meeting 15 minutes before the scheduled appointment time.
+            </p>
+            <p style="margin: 10px 0 0 0; font-size: 11px; color: #888;">
+              Meeting Link: <span class="video-link">${appointmentDetails.jitsiMeetingUrl}</span>
+            </p>
+          </div>
+          ` : ''}
+
+          <p>Please ensure you are available at the scheduled time. The patient is expecting your professional care.</p>
+
+          <center>
+            <a href="${process.env.FRONTEND_URL || 'http://localhost:8080'}/dashboard/appointments" class="button" style="color: white !important;">View Appointment</a>
+          </center>
+        </div>
+        <div class="footer">
+          <p>© ${new Date().getFullYear()} Home Care System. All rights reserved.</p>
+          <p>This is an automated message, please do not reply directly to this email.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail(caregiverEmail, subject, html);
+};
+
 module.exports = {
   sendEmail,
   sendAppointmentConfirmation,
+  sendCaregiverAppointmentNotification,
   sendStatusAlert,
   sendPasswordChangeNotification,
   sendPasswordResetEmail,

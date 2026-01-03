@@ -17,7 +17,8 @@ require('dotenv').config();
 
 const JITSI_CONFIG = {
   // Server Configuration
-  domain: process.env.JITSI_DOMAIN || 'meet.jit.si',
+  domain: process.env.JITSI_DOMAIN || '91.108.121.232',  // Web interface (port 443/HTTPS)
+  restApiPort: 8085,  // REST API port for stats/monitoring
 
   // Room Configuration
   roomName: 'TestRoom_' + Date.now(),
@@ -446,30 +447,62 @@ async function testJitsiServer() {
   console.log('\n🔍 Testing Jitsi Server Availability...\n');
 
   try {
-    // Use http for localhost, https for everything else
-    const protocol = JITSI_CONFIG.domain.includes('localhost') || JITSI_CONFIG.domain.includes('127.0.0.1')
+    // Use http for localhost, https for all other servers (including self-hosted)
+    const protocol = JITSI_CONFIG.domain.includes('localhost') ||
+                     JITSI_CONFIG.domain.includes('127.0.0.1')
       ? 'http'
       : 'https';
 
     const url = `${protocol}://${JITSI_CONFIG.domain}`;
-    console.log(`Testing: ${url}`);
+    console.log(`Testing Web Interface: ${url}`);
 
     const response = await axios.get(url, {
       timeout: 10000,
-      validateStatus: () => true
+      validateStatus: () => true,
+      httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false }) // Accept self-signed certs
     });
 
     if (response.status === 200) {
-      console.log('✅ Jitsi server is reachable!');
+      console.log('✅ Jitsi Web Interface is reachable!');
       console.log(`   Status: ${response.status}`);
-      console.log(`   Protocol: ${protocol}`);
-      console.log(`   Domain: ${JITSI_CONFIG.domain}`);
+      console.log(`   URL: ${url}`);
 
       if (JITSI_CONFIG.domain.includes('localhost')) {
         console.log('\n🏠 Using LOCAL Jitsi server');
         console.log('   ✓ Great for development and testing');
         console.log('   ✓ Full control over configuration');
         console.log('   ✓ No internet required');
+      } else if (JITSI_CONFIG.domain.includes('91.108.121.232')) {
+        console.log('\n🌐 Using SELF-HOSTED Jitsi server');
+        console.log('   ✓ Web Interface: https://91.108.121.232 (port 443)');
+        console.log('   ✓ REST API: http://91.108.121.232:8085');
+        console.log('   ✓ Full control over configuration');
+        console.log('   ✓ Professional teleconferencing features enabled');
+        console.log('   ✓ Private and secure');
+      }
+
+      // Test REST API health endpoint (for self-hosted servers)
+      if (JITSI_CONFIG.restApiPort && !JITSI_CONFIG.domain.includes('meet.jit.si')) {
+        try {
+          console.log('\n🔍 Testing REST API...');
+          const apiUrl = `http://${JITSI_CONFIG.domain}:${JITSI_CONFIG.restApiPort}/about/health`;
+          console.log(`   Testing: ${apiUrl}`);
+
+          const apiResponse = await axios.get(apiUrl, {
+            timeout: 5000,
+            validateStatus: () => true
+          });
+
+          if (apiResponse.status === 200) {
+            console.log('   ✅ REST API is reachable!');
+            console.log(`   Health Check: ${JSON.stringify(apiResponse.data)}`);
+          } else {
+            console.log(`   ⚠️  REST API returned status: ${apiResponse.status}`);
+          }
+        } catch (apiError) {
+          console.log(`   ⚠️  REST API not accessible: ${apiError.message}`);
+          console.log('   (This is optional - meetings will still work)');
+        }
       }
 
       return true;
@@ -483,8 +516,16 @@ async function testJitsiServer() {
 
     if (JITSI_CONFIG.domain.includes('localhost')) {
       console.log('\n💡 Local Jitsi Server Not Reachable');
-      console.log('   Make sure your Jitsi server is running on localhost:8000');
-      console.log('   Check if the port is correct in your .env file');
+      console.log('   Make sure your Jitsi server is running on localhost');
+      console.log('   Check if the server is started correctly');
+    } else if (JITSI_CONFIG.domain.includes('91.108.121.232')) {
+      console.log('\n💡 Self-Hosted Jitsi Server Not Reachable');
+      console.log('   Web Interface should be at: https://91.108.121.232 (port 443)');
+      console.log('   REST API should be at: http://91.108.121.232:8085');
+      console.log('   Check:');
+      console.log('     - Firewall settings and network connectivity');
+      console.log('     - SSL certificate is properly configured');
+      console.log('     - Verify JITSI_DOMAIN in .env file is correct');
     } else if (JITSI_CONFIG.domain === 'meet.jit.si') {
       console.log('\n💡 Tip: You are using the public Jitsi server (meet.jit.si)');
       console.log('   This is normal and the server is likely working.');
@@ -696,7 +737,8 @@ function generateTestableLinks() {
   console.log('\n🔗 TESTABLE MEETING LINKS\n');
   console.log('=' .repeat(70));
 
-  const protocol = JITSI_CONFIG.domain.includes('localhost') || JITSI_CONFIG.domain.includes('127.0.0.1')
+  const protocol = JITSI_CONFIG.domain.includes('localhost') ||
+                   JITSI_CONFIG.domain.includes('127.0.0.1')
     ? 'http'
     : 'https';
 
@@ -770,7 +812,8 @@ function generateSampleMeeting() {
     false
   );
 
-  const protocol = JITSI_CONFIG.domain.includes('localhost') || JITSI_CONFIG.domain.includes('127.0.0.1')
+  const protocol = JITSI_CONFIG.domain.includes('localhost') ||
+                   JITSI_CONFIG.domain.includes('127.0.0.1')
     ? 'http'
     : 'https';
 
@@ -858,7 +901,8 @@ async function main() {
   // Save to file
   saveConfigToFile();
 
-  const protocol = JITSI_CONFIG.domain.includes('localhost') || JITSI_CONFIG.domain.includes('127.0.0.1')
+  const protocol = JITSI_CONFIG.domain.includes('localhost') ||
+                   JITSI_CONFIG.domain.includes('127.0.0.1')
     ? 'http'
     : 'https';
 

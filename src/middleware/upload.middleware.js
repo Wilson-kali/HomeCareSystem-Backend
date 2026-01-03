@@ -34,6 +34,7 @@ const upload = multer({
 const uploadMultiple = upload.fields([
   { name: 'supportingDocuments', maxCount: 5 },
   { name: 'profilePicture', maxCount: 1 },
+  { name: 'profileImage', maxCount: 1 },
   { name: 'idDocuments', maxCount: 3 }
 ]);
 

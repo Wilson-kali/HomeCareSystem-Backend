@@ -16,6 +16,7 @@ const timeSlotRoutes = require('./timeSlot.routes');
 const availabilityRoutes = require('./availability.routes');
 const locationRoutes = require('./location.routes');
 const careReportRoutes = require('./careReport.routes');
+const meetingRoutes = require('./meeting.routes');
 
 const router = express.Router();
 
@@ -36,5 +37,6 @@ router.use('/timeslots', timeSlotRoutes);
 router.use('/availability', availabilityRoutes);
 router.use('/locations', locationRoutes);
 router.use('/care-reports', careReportRoutes);
+router.use('/meeting', meetingRoutes);
 
 module.exports = router;

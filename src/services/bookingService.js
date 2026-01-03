@@ -24,7 +24,7 @@ class BookingService {
 
   async createBookingWithPayment(bookingData) {
     const { timeSlotId, patientId, specialtyId, sessionType, notes } = bookingData;
-    
+
     // Verify slot is locked
     const timeSlot = await TimeSlot.findByPk(timeSlotId);
     if (!timeSlot || timeSlot.status !== TIMESLOT_STATUS.LOCKED) {
@@ -44,6 +44,29 @@ class BookingService {
       timeSlotId,
       paymentStatus: PAYMENT_STATUS.PENDING,
       bookedAt: new Date()
+    });
+
+    // Generate Jitsi meeting link for all appointments
+    const jitsiMeeting = generateJitsiMeeting(
+      appointment.id,
+      patientId,
+      timeSlot.caregiverId
+    );
+
+    // Update appointment with Jitsi details and magic link tokens
+    await appointment.update({
+      jitsiRoomName: jitsiMeeting.roomName,
+      jitsiMeetingUrl: jitsiMeeting.meetingUrl,
+      patientMeetingToken: jitsiMeeting.patientToken,
+      caregiverMeetingToken: jitsiMeeting.caregiverToken
+    });
+
+    logger.info('Jitsi meeting created for appointment', {
+      appointmentId: appointment.id,
+      sessionType: sessionType,
+      roomName: jitsiMeeting.roomName,
+      patientMeetingUrl: jitsiMeeting.patientMeetingUrl,
+      caregiverMeetingUrl: jitsiMeeting.caregiverMeetingUrl
     });
 
     return appointment;
@@ -228,26 +251,28 @@ class BookingService {
       // Create appointment first to get the ID
       const appointment = await Appointment.create(appointmentData, { transaction: t });
 
-      // Generate Jitsi meeting link if this is a teleconference appointment
-      if (pendingBooking.sessionType === 'teleconference' || pendingBooking.sessionType === 'video') {
-        const jitsiMeeting = generateJitsiMeeting(
-          appointment.id,
-          pendingBooking.patientId,
-          pendingBooking.caregiverId
-        );
+      // Generate Jitsi meeting link for all appointments
+      const jitsiMeeting = generateJitsiMeeting(
+        appointment.id,
+        pendingBooking.patientId,
+        pendingBooking.caregiverId
+      );
 
-        // Update appointment with Jitsi details
-        await appointment.update({
-          jitsiRoomName: jitsiMeeting.roomName,
-          jitsiMeetingUrl: jitsiMeeting.meetingUrl
-        }, { transaction: t });
+      // Update appointment with Jitsi details and magic link tokens
+      await appointment.update({
+        jitsiRoomName: jitsiMeeting.roomName,
+        jitsiMeetingUrl: jitsiMeeting.meetingUrl,
+        patientMeetingToken: jitsiMeeting.patientToken,
+        caregiverMeetingToken: jitsiMeeting.caregiverToken
+      }, { transaction: t });
 
-        logger.info('Jitsi meeting created for appointment', {
-          appointmentId: appointment.id,
-          roomName: jitsiMeeting.roomName,
-          meetingUrl: jitsiMeeting.meetingUrl
-        });
-      }
+      logger.info('Jitsi meeting created for appointment', {
+        appointmentId: appointment.id,
+        sessionType: pendingBooking.sessionType,
+        roomName: jitsiMeeting.roomName,
+        patientMeetingUrl: jitsiMeeting.patientMeetingUrl,
+        caregiverMeetingUrl: jitsiMeeting.caregiverMeetingUrl
+      });
 
       // Update pending booking status
       await pendingBooking.update({

@@ -158,6 +158,18 @@ const Appointment = sequelize.define('Appointment', {
     allowNull: true,
     field: 'jitsi_meeting_url',
     comment: 'Full Jitsi meeting URL for teleconference appointments'
+  },
+  patientMeetingToken: {
+    type: DataTypes.STRING(64),
+    allowNull: true,
+    field: 'patient_meeting_token',
+    comment: 'Unique token for patient to join meeting'
+  },
+  caregiverMeetingToken: {
+    type: DataTypes.STRING(64),
+    allowNull: true,
+    field: 'caregiver_meeting_token',
+    comment: 'Unique token for caregiver to join meeting'
   }
 }, {
   tableName: 'appointments'

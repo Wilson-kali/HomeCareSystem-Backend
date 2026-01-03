@@ -38,7 +38,7 @@ const generateJitsiMeetingUrl = (roomName, domain = null) => {
   // Use domain from environment variable or default to meet.jit.si
   const jitsiDomain = domain || process.env.JITSI_DOMAIN || 'meet.jit.si';
 
-  // Use http for localhost, https for everything else
+  // Use http for localhost only, https for all other servers (including self-hosted)
   const protocol = jitsiDomain.includes('localhost') || jitsiDomain.includes('127.0.0.1')
     ? 'http'
     : 'https';
@@ -47,19 +47,30 @@ const generateJitsiMeetingUrl = (roomName, domain = null) => {
 };
 
 /**
- * Generate complete Jitsi meeting details for an appointment
+ * Generate complete Jitsi meeting details for an appointment with magic links
  * @param {number} appointmentId - The appointment ID
  * @param {number} patientId - The patient ID
  * @param {number} caregiverId - The caregiver ID
- * @returns {object} Object containing roomName and meetingUrl
+ * @returns {object} Object containing roomName, tokens, and unique URLs for patient and caregiver
  */
 const generateJitsiMeeting = (appointmentId, patientId, caregiverId) => {
   const roomName = generateJitsiRoomName(appointmentId, patientId, caregiverId);
-  const meetingUrl = generateJitsiMeetingUrl(roomName);
+
+  // Generate unique magic link tokens for each participant
+  const patientToken = crypto.randomBytes(32).toString('hex');
+  const caregiverToken = crypto.randomBytes(32).toString('hex');
+
+  // Generate app URL (not direct Jitsi URL)
+  const appUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
 
   return {
     roomName,
-    meetingUrl
+    patientMeetingUrl: `${appUrl}/meeting/join/${patientToken}`,
+    caregiverMeetingUrl: `${appUrl}/meeting/join/${caregiverToken}`,
+    patientToken,
+    caregiverToken,
+    // Keep for backward compatibility
+    meetingUrl: `${appUrl}/meeting/${appointmentId}`
   };
 };
 

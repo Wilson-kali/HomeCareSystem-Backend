@@ -4,7 +4,7 @@ const { PaymentTransaction, PendingPaymentTransaction, Appointment, Caregiver, U
 const { PAYMENT_STATUS } = require('../utils/constants');
 const paymentConfig = require('../config/payment');
 const logger = require('../utils/logger');
-const { sendPaymentConfirmation, sendPaymentFailureNotification } = require('./emailService');
+const { sendPaymentConfirmation, sendPaymentFailureNotification, sendCaregiverAppointmentNotification } = require('./emailService');
 const bookingService = require('./bookingService');
 
 /**
@@ -344,6 +344,16 @@ const processWebhook = async (webhookData, signature) => {
             ]
           });
 
+          // Construct magic links for both participants
+          const appUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+          const patientMeetingUrl = fullAppointment.patientMeetingToken
+            ? `${appUrl}/meeting/join/${fullAppointment.patientMeetingToken}`
+            : null;
+          const caregiverMeetingUrl = fullAppointment.caregiverMeetingToken
+            ? `${appUrl}/meeting/join/${fullAppointment.caregiverMeetingToken}`
+            : null;
+
+          // Send payment confirmation to patient
           if (fullAppointment?.Patient?.User?.email) {
             await sendPaymentConfirmation(fullAppointment.Patient.User.email, {
               patientName: `${fullAppointment.Patient.User.firstName} ${fullAppointment.Patient.User.lastName}`,
@@ -352,9 +362,24 @@ const processWebhook = async (webhookData, signature) => {
               appointmentDate: fullAppointment.TimeSlot?.date || fullAppointment.scheduledDate,
               caregiverName: fullAppointment.Caregiver?.User ?
                 `${fullAppointment.Caregiver.User.firstName} ${fullAppointment.Caregiver.User.lastName}` :
-                'Your Caregiver'
+                'Your Caregiver',
+              jitsiMeetingUrl: patientMeetingUrl
             });
-            logger.info(`Payment confirmation email sent to: ${fullAppointment.Patient.User.email}`);
+            logger.info(`Payment confirmation email sent to patient: ${fullAppointment.Patient.User.email}`);
+          }
+
+          // Send new appointment notification to caregiver
+          if (fullAppointment?.Caregiver?.User?.email) {
+            await sendCaregiverAppointmentNotification(fullAppointment.Caregiver.User.email, {
+              caregiverName: `${fullAppointment.Caregiver.User.firstName} ${fullAppointment.Caregiver.User.lastName}`,
+              patientName: `${fullAppointment.Patient.User.firstName} ${fullAppointment.Patient.User.lastName}`,
+              scheduledDate: fullAppointment.scheduledDate,
+              sessionType: fullAppointment.sessionType,
+              duration: fullAppointment.duration,
+              notes: fullAppointment.notes,
+              jitsiMeetingUrl: caregiverMeetingUrl
+            });
+            logger.info(`New appointment notification sent to caregiver: ${fullAppointment.Caregiver.User.email}`);
           }
         } catch (emailError) {
           logger.error('Failed to send payment confirmation email:', emailError);
