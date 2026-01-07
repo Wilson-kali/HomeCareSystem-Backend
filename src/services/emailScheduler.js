@@ -33,7 +33,8 @@ class EmailScheduler {
       'booking_expired': 'Booking Expired - Home Care System',
       'status_alert': 'Patient Status Alert',
       'reschedule_notification': 'Appointment Rescheduled - CareConnect',
-      'cancellation_notification': 'Appointment Cancelled - CareConnect'
+      'cancellation_notification': 'Appointment Cancelled - CareConnect',
+      'data_protection_notification': 'Data Protection Policy Acknowledgment - CareConnect'
     };
     return subjects[template] || 'Notification from CareConnect';
   }
@@ -115,6 +116,10 @@ class EmailScheduler {
           break;
         case 'cancellation_notification':
           await emailService.sendCancellationNotification(emailJob.data.recipientEmail, emailJob.data.recipientName, emailJob.data.appointmentDateTime, emailJob.data.reason);
+          emailSent = true;
+          break;
+        case 'data_protection_notification':
+          await emailService.sendDataProtectionNotification(emailJob.data);
           emailSent = true;
           break;
         default:

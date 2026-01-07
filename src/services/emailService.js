@@ -989,6 +989,158 @@ const sendCaregiverAppointmentNotification = async (caregiverEmail, appointmentD
   return sendEmail(caregiverEmail, subject, html);
 };
 
+const sendDataProtectionNotification = async (userData) => {
+  const { firstName, lastName, email, role } = userData;
+  const systemName = process.env.SYSTEM || 'CareConnect';
+  const subject = `Data Protection Policy Acknowledgment - ${systemName}`;
+  
+  // Determine role-specific content
+  const isCaregiver = role === 'caregiver';
+  const roleDisplayName = isCaregiver ? 'Healthcare Caregiver' : 'Patient';
+  const backendUrl = process.env.BACKEND_URL || 'http://localhost:5000';
+  const termsUrl = `${backendUrl}/api/terms/${isCaregiver ? 'caregiver' : 'patient'}/pdf`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 20px auto; background: white; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+        .content { padding: 30px 20px; }
+        .highlight { background: #e3f2fd; padding: 15px; border-left: 4px solid #2196f3; margin: 20px 0; border-radius: 4px; }
+        .rights-box { background: #f0f8ff; padding: 20px; border: 1px solid #2196f3; border-radius: 4px; margin: 20px 0; }
+        .usage-box { background: #f9f9f9; padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; margin: 20px 0; }
+        .contact-box { background: #fff3cd; padding: 20px; border: 1px solid #ffeaa7; border-radius: 4px; margin: 20px 0; }
+        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
+        .button { display: inline-block; background: #2196f3; color: white !important; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 10px 5px; font-size: 14px; font-weight: 500; }
+        ul { padding-left: 20px; }
+        li { margin-bottom: 8px; }
+        .detail-row { padding: 8px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+        .detail-row:last-child { border-bottom: none; }
+        .detail-row strong { display: inline-block; min-width: 100px; color: #1a1a1a; font-weight: 600; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🛡️ Data Protection Policy Acknowledgment</h1>
+          <p style="margin: 10px 0 0 0; opacity: 0.9;">${systemName} Healthcare Platform</p>
+        </div>
+        
+        <div class="content">
+          <h2>Dear ${firstName} ${lastName},</h2>
+          
+          <p>Thank you for registering with ${systemName} as a <strong>${roleDisplayName}</strong>. This email confirms that by creating your account, you have acknowledged and accepted our data protection policies in compliance with the <strong>Malawi Data Privacy Protection Act</strong>.</p>
+          
+          <div class="highlight">
+            <h3>Registration Confirmation:</h3>
+            <p>By completing your registration${isCaregiver ? ' and submitting your professional credentials' : ''}, you have consented to the collection, processing, and storage of your personal data as outlined in our Terms of Service and Privacy Policy.</p>
+            ${isCaregiver ? '<p><strong>Note:</strong> Your caregiver account is currently under review by our administrative team. You will receive a separate notification once your credentials are verified and your account is approved.</p>' : ''}
+          </div>
+          
+          <div class="rights-box">
+            <h3> Your Data Protection Rights Under Malawi Law:</h3>
+            <ul>
+              <li><strong>Right to Access:</strong> You can request access to your personal data held by our platform</li>
+              <li><strong>Right to Correction:</strong> You can request correction of any inaccurate personal data</li>
+              <li><strong>Right to Deletion:</strong> You can request deletion of your personal data (subject to legal and medical record retention requirements)</li>
+              <li><strong>Right to Withdraw Consent:</strong> You can withdraw consent for non-essential data processing</li>
+              <li><strong>Right to Complain:</strong> You can lodge complaints with the Malawi Data Protection Authority</li>
+            </ul>
+          </div>
+          
+          <div class="usage-box">
+            <h3>How We Use Your Data:</h3>
+            <ul>
+              <li>Healthcare service delivery and coordination</li>
+              <li>Account management and communication</li>
+              <li>Compliance with healthcare regulations</li>
+              <li>Platform security and fraud prevention</li>
+              ${isCaregiver ? '<li>Professional credential verification and background checks</li>' : '<li>Medical appointment scheduling and care coordination</li>'}
+              ${isCaregiver ? '<li>Regulatory reporting to healthcare authorities</li>' : '<li>Emergency contact notifications when necessary</li>'}
+              ${isCaregiver ? '<li>Performance monitoring and quality assurance</li>' : '<li>Health record management (with your consent)</li>'}
+            </ul>
+          </div>
+          
+          <div class="highlight">
+            <h3>📧Communication Preferences:</h3>
+            <p>You will receive automated email notifications regarding:</p>
+            <ul>
+              <li>Account status updates and security notifications</li>
+              ${isCaregiver ? '<li>New appointment bookings and schedule changes</li>' : '<li>Appointment confirmations and reminders</li>'}
+              ${isCaregiver ? '<li>Payment notifications and earnings reports</li>' : '<li>Payment confirmations and receipts</li>'}
+              <li>Important updates about our data protection policies</li>
+              <li>Platform maintenance and service announcements</li>
+            </ul>
+            <p><em>These communications are essential for platform operation and compliance.</em></p>
+          </div>
+          
+          <div class="highlight">
+            <h3> Terms & Conditions:</h3>
+            <p>You can review the complete ${isCaregiver ? 'caregiver-specific' : 'patient'} terms and conditions that you agreed to during registration:</p>
+            <center>
+              <a href="${termsUrl}" class="button" style="color: white !important;">View ${isCaregiver ? 'Caregiver' : 'Patient'} Terms & Conditions (PDF)</a>
+            </center>
+            <p style="font-size: 12px; color: #666; margin-top: 10px;">This document contains the specific terms, conditions, and responsibilities for ${roleDisplayName.toLowerCase()}s using our platform.</p>
+          </div>
+          
+          <div class="contact-box">
+            <h3>📞 Contact Information:</h3>
+            <p>If you have any questions about your data protection rights or our privacy practices, please contact us:</p>
+            <div class="detail-row">
+              <strong>Email:</strong>
+              <span>privacy@careconnect.mw</span>
+            </div>
+            <div class="detail-row">
+              <strong>Phone:</strong>
+              <span>+265 xxx xxx xxx</span>
+            </div>
+            <div class="detail-row">
+              <strong>Data Protection Officer:</strong>
+              <span>dpo@careconnect.mw</span>
+            </div>
+          </div>
+          
+          <div class="usage-box">
+            <h3>📋 Account Details:</h3>
+            <div class="detail-row">
+              <strong>Email:</strong>
+              <span>${email}</span>
+            </div>
+            <div class="detail-row">
+              <strong>Role:</strong>
+              <span>${roleDisplayName}</span>
+            </div>
+            <div class="detail-row">
+              <strong>Registration Date:</strong>
+              <span>${new Date().toLocaleDateString('en-GB')}</span>
+            </div>
+            ${isCaregiver ? `
+            <div class="detail-row">
+              <strong>Account Status:</strong>
+              <span>Pending Approval</span>
+            </div>
+            ` : ''}
+          </div>
+        </div>
+        
+        <div class="footer">
+          <p>This is an automated message sent in compliance with the Malawi Data Privacy Protection Act.</p>
+          <p><strong>${systemName} Healthcare Platform</strong><br>
+          Committed to protecting your privacy and data rights.</p>
+          <p>© ${new Date().getFullYear()} ${systemName}. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail(email, subject, html);
+};
+
 module.exports = {
   sendEmail,
   sendAppointmentConfirmation,
@@ -1003,5 +1155,6 @@ module.exports = {
   sendBookingExpiredNotification,
   sendRescheduleNotification,
   sendCancellationNotification,
-  sendUserWelcomeEmail
+  sendUserWelcomeEmail,
+  sendDataProtectionNotification
 };

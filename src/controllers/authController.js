@@ -179,10 +179,18 @@ const register = async (req, res, next) => {
 
     await transaction.commit();
     
+    // Send data protection notification email for all registrations
+    const EmailScheduler = require('../services/emailScheduler');
+    await EmailScheduler.queueEmail(createdUser.email, 'data_protection_notification', {
+      firstName: createdUser.firstName,
+      lastName: createdUser.lastName,
+      email: createdUser.email,
+      role: role
+    });
+    
     // Send appropriate response based on role
     if (role === 'caregiver') {
-      // Queue email notification to caregiver
-      const EmailScheduler = require('../services/emailScheduler');
+      // Queue additional email notification to caregiver
       await EmailScheduler.queueEmail(createdUser.email, 'caregiver_registration', {
         email: createdUser.email,
         firstName: createdUser.firstName
