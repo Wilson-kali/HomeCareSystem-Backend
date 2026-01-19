@@ -38,7 +38,7 @@ async function importLocations() {
     let skipped = 0;
 
     const insertQuery = `
-      INSERT INTO location (region, district, traditional_authority, village, createdAt, updatedAt)
+      INSERT INTO locations (region, district, traditional_authority, village, createdAt, updatedAt)
       VALUES ?
     `;
 
