@@ -23,7 +23,7 @@ const getPendingCaregivers = async (req, res, next) => {
   }
 };
 
-const approveCaregiver = async (req, res, next) => {
+const verifyCaregiver = async (req, res, next) => {
   try {
     const { userId } = req.params;
     
@@ -35,17 +35,16 @@ const approveCaregiver = async (req, res, next) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Update both user status and caregiver verification
-    await user.update({ isActive: true });
-    
-    if (user.Caregiver) {
-      await user.Caregiver.update({ verificationStatus: 'verified' });
+    if (!user.Caregiver) {
+      return res.status(400).json({ error: 'User is not a caregiver' });
     }
+
+    // Update caregiver verification status
+    await user.Caregiver.update({ verificationStatus: 'APPROVED' });
     
-    // Queue approval email to caregiver
+    // Queue verification email to caregiver
     const EmailScheduler = require('../services/emailScheduler');
-    await EmailScheduler.queueEmail(user.email, 'caregiver_approval', {
-      email: user.email,
+    await EmailScheduler.queueEmail(user.email, 'caregiver_verification', {
       firstName: user.firstName
     });
     
@@ -63,16 +62,65 @@ const rejectCaregiver = async (req, res, next) => {
     const { userId } = req.params;
     const { reason } = req.body;
     
-    const user = await User.findByPk(userId);
+    if (!reason || reason.trim() === '') {
+      return res.status(400).json({ error: 'Rejection reason is required' });
+    }
+
+    const user = await User.findByPk(userId, {
+      include: [{ model: Caregiver }]
+    });
+    
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    await user.destroy();
+    if (!user.Caregiver) {
+      return res.status(400).json({ error: 'User is not a caregiver' });
+    }
+
+    // Update caregiver verification status
+    await user.Caregiver.update({ verificationStatus: 'REJECTED' });
     
-    // TODO: Send rejection email with reason
+    // Queue rejection email with reason
+    const EmailScheduler = require('../services/emailScheduler');
+    await EmailScheduler.queueEmail(user.email, 'caregiver_rejection', {
+      firstName: user.firstName,
+      reason: reason.trim()
+    });
     
     res.json({ message: 'Caregiver application rejected' });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const toggleUserStatus = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { isActive } = req.body;
+    
+    const user = await User.findByPk(userId, {
+      include: [{ model: Role }]
+    });
+    
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Update user status
+    await user.update({ isActive });
+    
+    // Queue status change email
+    const EmailScheduler = require('../services/emailScheduler');
+    await EmailScheduler.queueEmail(user.email, 'account_status_change', {
+      firstName: user.firstName,
+      status: isActive ? 'activated' : 'deactivated'
+    });
+    
+    res.json({ 
+      message: `User ${isActive ? 'activated' : 'deactivated'} successfully`,
+      user: sanitizeUser(user)
+    });
   } catch (error) {
     next(error);
   }
@@ -770,8 +818,9 @@ const createUser = async (req, res, next) => {
 
 module.exports = {
   getPendingCaregivers,
-  approveCaregiver,
+  verifyCaregiver,
   rejectCaregiver,
+  toggleUserStatus,
   getAllUsers,
   getUserStats,
   getAllRoles,

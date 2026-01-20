@@ -1,5 +1,5 @@
 const express = require('express');
-const { getPendingCaregivers, approveCaregiver, rejectCaregiver, getAllUsers, getUserStats, getAllRoles, updateUser, getAllPermissions, updateRolePermissions, createUser } = require('../controllers/adminController');
+const { getPendingCaregivers, verifyCaregiver, rejectCaregiver, toggleUserStatus, getAllUsers, getUserStats, getAllRoles, updateUser, getAllPermissions, updateRolePermissions, createUser } = require('../controllers/adminController');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const { requireAdmin } = require('../middleware/roleCheck.middleware');
 const { requirePermission, requireAnyPermission } = require('../middleware/permissions');
@@ -91,8 +91,9 @@ router.get('/caregivers/pending-verification', requirePermission('view_caregiver
     next(error);
   }
 });
-router.put('/caregivers/:userId/approve', requirePermission('approve_caregivers'), approveCaregiver);
-router.delete('/caregivers/:userId/reject', requirePermission('approve_caregivers'), rejectCaregiver);
+router.put('/caregivers/:userId/verify', requirePermission('approve_caregivers'), verifyCaregiver);
+router.put('/caregivers/:userId/reject', requirePermission('approve_caregivers'), rejectCaregiver);
+router.put('/users/:userId/toggle-status', requireAnyPermission(['edit_caregivers', 'edit_patients', 'edit_accountants', 'edit_regional_managers']), toggleUserStatus);
 router.get('/users', requireAnyPermission(['view_users', 'view_caregivers', 'view_patients', 'view_accountants', 'view_regional_managers', 'view_system_managers']), getAllUsers);
 router.post('/users', requirePermission('create_users'), createUser);
 router.get('/users/stats', requireAnyPermission(['view_users', 'view_caregivers', 'view_patients', 'view_accountants', 'view_regional_managers', 'view_system_managers']), getUserStats);
@@ -492,38 +493,6 @@ router.get('/caregivers/:caregiverId/transactions', async (req, res, next) => {
       success: true,
       transactions,
       totalEarnings
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
-router.put('/users/:userId/toggle-status', async (req, res, next) => {
-  try {
-    const { User, Role } = require('../models');
-    const user = await User.findByPk(req.params.userId, {
-      include: [{ model: Role }]
-    });
-    
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    const wasInactive = !user.isActive;
-    await user.update({ isActive: !user.isActive });
-    
-    // Queue approval email if caregiver is being activated
-    if (wasInactive && user.isActive && user.Role?.name === 'caregiver') {
-      const EmailScheduler = require('../services/emailScheduler');
-      await EmailScheduler.queueEmail(user.email, 'caregiver_approval', {
-        email: user.email,
-        firstName: user.firstName
-      });
-    }
-    
-    res.json({ 
-      message: `User ${user.isActive ? 'activated' : 'deactivated'} successfully`,
-      user: sanitizeUser(user)
     });
   } catch (error) {
     next(error);

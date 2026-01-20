@@ -40,7 +40,7 @@ const register = async (req, res, next) => {
       phone,
       idNumber,
       role_id: userRole.id,
-      isActive: role !== 'caregiver' // Caregivers need approval
+      isActive: true // All users start active, verification is separate for caregivers
     }, { transaction });
 
     // Get the user ID from the database since Sequelize isn't returning it properly
@@ -307,10 +307,23 @@ const login = async (req, res, next) => {
           model: Permission,
           through: { attributes: [] }
         }]
+      }, {
+        model: Caregiver,
+        required: false
       }]
     });
+    
     if (!user || !user.isActive) {
       return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    // Additional validation for caregivers
+    if (user.Role?.name === 'caregiver') {
+      if (!user.Caregiver || user.Caregiver.verificationStatus !== 'APPROVED') {
+        return res.status(401).json({ 
+          error: 'Account pending verification. Please wait for admin approval.' 
+        });
+      }
     }
 
     const isValidPassword = await bcrypt.compare(password, user.password);

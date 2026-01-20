@@ -280,9 +280,9 @@ const sendCaregiverRegistrationNotification = async (email, firstName) => {
   return sendEmail(email, subject, html);
 };
 
-const sendCaregiverApprovalNotification = async (email, firstName) => {
+const sendCaregiverVerificationNotification = async (email, firstName) => {
   const systemName = process.env.SYSTEM || 'CareConnect';
-  const subject = `Account Approved - ${systemName}`;
+  const subject = `Account Verified - ${systemName}`;
   const html = `
     <!DOCTYPE html>
     <html>
@@ -290,8 +290,8 @@ const sendCaregiverApprovalNotification = async (email, firstName) => {
       <style>
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
         .container { max-width: 600px; margin: 20px auto; background: white; }
-        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; }
-        .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: #1a1a1a; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; background: #e8f5e8; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: #2e7d32; }
         .content { padding: 30px 20px; }
         .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
       </style>
@@ -299,13 +299,102 @@ const sendCaregiverApprovalNotification = async (email, firstName) => {
     <body>
       <div class="container">
         <div class="header">
-          <h1>Account Approved</h1>
+          <h1>✅ Account Verified</h1>
         </div>
         <div class="content">
           <p>Dear ${firstName},</p>
-          <p>Congratulations! Your caregiver account has been approved and activated.</p>
-          <p>You can now log in to your account and start providing care services through ${systemName}.</p>
-          <p>Welcome to our healthcare community.</p>
+          <p>Congratulations! Your caregiver credentials have been successfully verified by our administrative team.</p>
+          <p>Your account is now fully verified and you can start providing healthcare services through ${systemName}.</p>
+          <p>Welcome to our healthcare community!</p>
+          <p>Best regards,<br>${systemName} Team</p>
+        </div>
+        <div class="footer">
+          <p>© ${new Date().getFullYear()} ${systemName}. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail(email, subject, html);
+};
+
+const sendCaregiverRejectionNotification = async (email, firstName, reason) => {
+  const systemName = process.env.SYSTEM || 'CareConnect';
+  const subject = `Account Verification - ${systemName}`;
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 20px auto; background: white; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; background: #fff3cd; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: #856404; }
+        .content { padding: 30px 20px; }
+        .reason-box { background: #f8f9fa; padding: 20px; border-left: 4px solid #ffc107; margin: 20px 0; border-radius: 4px; }
+        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>⚠️ Verification Update</h1>
+        </div>
+        <div class="content">
+          <p>Dear ${firstName},</p>
+          <p>Thank you for your interest in joining ${systemName} as a caregiver. After reviewing your application, we need additional information or corrections before we can proceed with verification.</p>
+          
+          <div class="reason-box">
+            <h3>Reason for Review:</h3>
+            <p>${reason}</p>
+          </div>
+          
+          <p>Please address the concerns mentioned above and feel free to contact our support team if you need assistance. You may resubmit your application once the issues are resolved.</p>
+          <p>We appreciate your understanding and look forward to working with you.</p>
+          <p>Best regards,<br>${systemName} Team</p>
+        </div>
+        <div class="footer">
+          <p>© ${new Date().getFullYear()} ${systemName}. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail(email, subject, html);
+};
+
+const sendAccountStatusNotification = async (email, firstName, isActive) => {
+  const systemName = process.env.SYSTEM || 'CareConnect';
+  const status = isActive ? 'Activated' : 'Deactivated';
+  const subject = `Account ${status} - ${systemName}`;
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 20px auto; background: white; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; background: ${isActive ? '#e8f5e8' : '#fff5f5'}; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: ${isActive ? '#2e7d32' : '#d32f2f'}; }
+        .content { padding: 30px 20px; }
+        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>${isActive ? '✅' : '❌'} Account ${status}</h1>
+        </div>
+        <div class="content">
+          <p>Dear ${firstName},</p>
+          <p>Your ${systemName} account has been ${isActive ? 'activated' : 'deactivated'} by our administrative team.</p>
+          ${isActive ? 
+            '<p>You can now access all platform features and services.</p>' : 
+            '<p>Your account access has been temporarily suspended. Please contact support if you believe this is an error.</p>'
+          }
+          <p>If you have any questions, please contact our support team.</p>
           <p>Best regards,<br>${systemName} Team</p>
         </div>
         <div class="footer">
@@ -1087,23 +1176,6 @@ const sendDataProtectionNotification = async (userData) => {
             <p style="font-size: 12px; color: #666; margin-top: 10px;">This document contains the specific terms, conditions, and responsibilities for ${roleDisplayName.toLowerCase()}s using our platform.</p>
           </div>
           
-          <div class="contact-box">
-            <h3>📞 Contact Information:</h3>
-            <p>If you have any questions about your data protection rights or our privacy practices, please contact us:</p>
-            <div class="detail-row">
-              <strong>Email:</strong>
-              <span>privacy@careconnect.mw</span>
-            </div>
-            <div class="detail-row">
-              <strong>Phone:</strong>
-              <span>+265 xxx xxx xxx</span>
-            </div>
-            <div class="detail-row">
-              <strong>Data Protection Officer:</strong>
-              <span>dpo@careconnect.mw</span>
-            </div>
-          </div>
-          
           <div class="usage-box">
             <h3>📋 Account Details:</h3>
             <div class="detail-row">
@@ -1149,7 +1221,9 @@ module.exports = {
   sendPasswordChangeNotification,
   sendPasswordResetEmail,
   sendCaregiverRegistrationNotification,
-  sendCaregiverApprovalNotification,
+  sendCaregiverVerificationNotification,
+  sendCaregiverRejectionNotification,
+  sendAccountStatusNotification,
   sendPaymentConfirmation,
   sendPaymentFailureNotification,
   sendBookingExpiredNotification,

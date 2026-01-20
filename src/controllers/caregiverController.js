@@ -8,12 +8,18 @@ const getCaregivers = async (req, res, next) => {
     const offset = (page - 1) * limit;
 
     let whereClause = {};
+    let userWhereClause = { isActive: true }; // Only active users
+    
     if (verified === 'true') {
-      whereClause.verificationStatus = VERIFICATION_STATUS.VERIFIED;
+      whereClause.verificationStatus = 'APPROVED'; // Only approved caregivers
     }
 
     let includeClause = [
-      { model: User },
+      { 
+        model: User, 
+        where: userWhereClause,
+        required: true 
+      },
       { model: Specialty, through: { attributes: [] } }
     ];
 
@@ -71,8 +77,15 @@ const getCaregivers = async (req, res, next) => {
 const getCaregiverById = async (req, res, next) => {
   try {
     const caregiver = await Caregiver.findByPk(req.params.id, {
+      where: {
+        verificationStatus: 'APPROVED' // Only approved caregivers
+      },
       include: [
-        { model: User },
+        { 
+          model: User,
+          where: { isActive: true }, // Only active users
+          required: true
+        },
         { model: Specialty, through: { attributes: [] } }
       ]
     });
