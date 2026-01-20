@@ -5,29 +5,30 @@ const { User, Patient, Caregiver, PrimaryPhysician, Role } = require('../models'
 const { jwtSecret, jwtExpiresIn, bcryptRounds } = require('../config/auth');
 const { USER_ROLES } = require('../utils/constants');
 const { sanitizeUser } = require('../utils/helpers');
+const NotificationHelper = require('../utils/notificationHelper');
+const { executeWithRetry } = require('../utils/databaseUtils');
+const { asyncHandler } = require('../middleware/databaseErrorHandler');
 
 const generateToken = (userId) => {
   return jwt.sign({ userId }, jwtSecret, { expiresIn: jwtExpiresIn });
 };
 
-const register = async (req, res, next) => {
-  const transaction = await User.sequelize.transaction();
-  
-  try {
+const register = asyncHandler(async (req, res, next) => {
+  const result = await executeWithRetry(async (transaction) => {
     const { email, password, firstName, lastName, phone, idNumber, role = 'patient', ...roleSpecificData } = req.body;
     const uploadedFiles = req.files || {};
 
     // Find the role
     const userRole = await Role.findOne({ where: { name: role } });
     if (!userRole) {
-      await transaction.rollback();
-      return res.status(400).json({ error: 'Invalid role specified' });
+      throw new Error('Invalid role specified');
     }
 
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
-      await transaction.rollback();
-      return res.status(409).json({ error: 'Email already registered' });
+      const error = new Error('Email already registered');
+      error.statusCode = 409;
+      throw error;
     }
 
     const hashedPassword = await bcrypt.hash(password, bcryptRounds);
@@ -54,8 +55,7 @@ const register = async (req, res, next) => {
     // Ensure user was created and has an ID
     if (!createdUser || !createdUser.id) {
       console.error('User creation failed - no ID');
-      await transaction.rollback();
-      return res.status(500).json({ error: 'Failed to create user' });
+      throw new Error('Failed to create user');
     }
 
     // Create role-specific profile
@@ -177,57 +177,57 @@ const register = async (req, res, next) => {
         break;
     }
 
-    await transaction.commit();
-    
-    // Send data protection notification email for all registrations
-    const EmailScheduler = require('../services/emailScheduler');
-    await EmailScheduler.queueEmail(createdUser.email, 'data_protection_notification', {
-      firstName: createdUser.firstName,
-      lastName: createdUser.lastName,
-      email: createdUser.email,
-      role: role
+    return { createdUser, role, roleSpecificData };
+  });
+
+  const { createdUser, role, roleSpecificData } = result;
+
+  // Create notifications for new caregiver registration (async, non-blocking)
+  if (role === 'caregiver') {
+    setImmediate(async () => {
+      try {
+        await NotificationHelper.createCaregiverVerificationNotifications(
+          createdUser.id, 
+          'PENDING', 
+          roleSpecificData.region
+        );
+      } catch (notificationError) {
+        console.error('Failed to create caregiver registration notifications:', notificationError);
+        // Don't fail the registration process for notification errors
+      }
     });
-    
-    // Send appropriate response based on role
-    if (role === 'caregiver') {
-      // Queue additional email notification to caregiver
-      await EmailScheduler.queueEmail(createdUser.email, 'caregiver_registration', {
-        email: createdUser.email,
-        firstName: createdUser.firstName
-      });
-      
-      res.status(201).json({
-        message: 'Registration submitted. Please wait for admin approval.',
-        requiresApproval: true
-      });
-    } else {
-      const token = generateToken(createdUser.id);
-      res.status(201).json({
-        message: 'Registration successful',
-        token,
-        user: sanitizeUser(createdUser)
-      });
-    }
-  } catch (error) {
-    console.error('Registration error details:', {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-      sql: error.sql,
-      parameters: error.parameters
-    });
-    await transaction.rollback();
-    
-    if (error.name === 'SequelizeValidationError') {
-      return res.status(400).json({ 
-        error: 'Validation error', 
-        details: error.errors.map(e => ({ field: e.path, message: e.message }))
-      });
-    }
-    
-    next(error);
   }
-};
+  
+  // Send data protection notification email for all registrations
+  const EmailScheduler = require('../services/emailScheduler');
+  await EmailScheduler.queueEmail(createdUser.email, 'data_protection_notification', {
+    firstName: createdUser.firstName,
+    lastName: createdUser.lastName,
+    email: createdUser.email,
+    role: role
+  });
+  
+  // Send appropriate response based on role
+  if (role === 'caregiver') {
+    // Queue additional email notification to caregiver
+    await EmailScheduler.queueEmail(createdUser.email, 'caregiver_registration', {
+      email: createdUser.email,
+      firstName: createdUser.firstName
+    });
+    
+    res.status(201).json({
+      message: 'Registration submitted. Please wait for admin approval.',
+      requiresApproval: true
+    });
+  } else {
+    const token = generateToken(createdUser.id);
+    res.status(201).json({
+      message: 'Registration successful',
+      token,
+      user: sanitizeUser(createdUser)
+    });
+  }
+});
 
 const registerAdmin = async (req, res, next) => {
   const transaction = await User.sequelize.transaction();
@@ -463,9 +463,9 @@ const resetPassword = async (req, res, next) => {
 
 module.exports = {
   register,
-  registerAdmin,
-  login,
-  getProfile,
-  forgotPassword,
-  resetPassword
+  registerAdmin: asyncHandler(registerAdmin),
+  login: asyncHandler(login),
+  getProfile: asyncHandler(getProfile),
+  forgotPassword: asyncHandler(forgotPassword),
+  resetPassword: asyncHandler(resetPassword)
 };

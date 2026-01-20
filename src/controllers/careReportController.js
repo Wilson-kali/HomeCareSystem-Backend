@@ -2,6 +2,7 @@ const { CareSessionReport, Appointment, Patient, Caregiver, User, Specialty } = 
 const { APPOINTMENT_STATUS } = require('../utils/constants');
 const { uploadToCloudinary } = require('../services/cloudinaryService');
 const fs = require('fs').promises;
+const NotificationHelper = require('../utils/notificationHelper');
 
 // Create or update care session report (Caregiver only)
 const createOrUpdateCareReport = async (req, res, next) => {
@@ -114,6 +115,21 @@ const createOrUpdateCareReport = async (req, res, next) => {
     } else {
       // Create new report
       careReport = await CareSessionReport.create(reportData);
+      
+      // Create notification for new care report
+      try {
+        const fullAppointment = await Appointment.findByPk(appointmentId, {
+          include: [{ model: Patient, include: [{ model: User }] }]
+        });
+        
+        await NotificationHelper.createCareReportNotifications({
+          id: careReport.id,
+          patientId: fullAppointment?.Patient?.User?.id,
+          sessionDate: new Date(appointment.scheduledDate).toLocaleDateString()
+        });
+      } catch (notificationError) {
+        console.error('Failed to create care report notifications:', notificationError);
+      }
     }
 
     res.json({

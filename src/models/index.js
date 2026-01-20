@@ -20,6 +20,7 @@ const Location = require('./Location');
 const PendingBooking = require('./PendingBooking');
 const PendingPaymentTransaction = require('./PendingPaymentTransaction');
 const EmailQueue = require('./EmailQueue');
+const Notification = require('./Notification');
 
 // Define associations
 // User-Role association
@@ -121,6 +122,10 @@ PendingPaymentTransaction.belongsTo(PendingBooking, { foreignKey: 'pendingBookin
 PaymentTransaction.hasMany(PendingPaymentTransaction, { foreignKey: 'convertedToPaymentId' });
 PendingPaymentTransaction.belongsTo(PaymentTransaction, { foreignKey: 'convertedToPaymentId', as: 'ConvertedPayment' });
 
+// Notification associations
+User.hasMany(Notification, { foreignKey: 'userId' });
+Notification.belongsTo(User, { foreignKey: 'userId' });
+
 module.exports = {
   sequelize,
   User,
@@ -143,5 +148,6 @@ module.exports = {
   Location,
   PendingBooking,
   PendingPaymentTransaction,
-  EmailQueue
+  EmailQueue,
+  Notification
 };

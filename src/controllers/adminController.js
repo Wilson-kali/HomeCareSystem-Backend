@@ -1,5 +1,6 @@
 const { User, Caregiver, Patient, Role, Permission, RolePermission } = require('../models');
 const { sanitizeUser } = require('../utils/helpers');
+const NotificationHelper = require('../utils/notificationHelper');
 
 const getPendingCaregivers = async (req, res, next) => {
   try {
@@ -42,6 +43,17 @@ const verifyCaregiver = async (req, res, next) => {
     // Update caregiver verification status
     await user.Caregiver.update({ verificationStatus: 'APPROVED' });
     
+    // Create notification for caregiver verification
+    try {
+      await NotificationHelper.createCaregiverVerificationNotifications(
+        user.id, 
+        'APPROVED', 
+        user.Caregiver.region
+      );
+    } catch (notificationError) {
+      console.error('Failed to create verification notifications:', notificationError);
+    }
+    
     // Queue verification email to caregiver
     const EmailScheduler = require('../services/emailScheduler');
     await EmailScheduler.queueEmail(user.email, 'caregiver_verification', {
@@ -80,6 +92,17 @@ const rejectCaregiver = async (req, res, next) => {
 
     // Update caregiver verification status
     await user.Caregiver.update({ verificationStatus: 'REJECTED' });
+    
+    // Create notification for caregiver rejection
+    try {
+      await NotificationHelper.createCaregiverVerificationNotifications(
+        user.id, 
+        'REJECTED', 
+        user.Caregiver.region
+      );
+    } catch (notificationError) {
+      console.error('Failed to create rejection notifications:', notificationError);
+    }
     
     // Queue rejection email with reason
     const EmailScheduler = require('../services/emailScheduler');

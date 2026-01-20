@@ -6,6 +6,7 @@ const paymentConfig = require('../config/payment');
 const logger = require('../utils/logger');
 const { sendPaymentConfirmation, sendPaymentFailureNotification, sendCaregiverAppointmentNotification } = require('./emailService');
 const bookingService = require('./bookingService');
+const NotificationHelper = require('../utils/notificationHelper');
 
 /**
  * Initialize Paychangu Payment for Booking
@@ -324,6 +325,30 @@ const processWebhook = async (webhookData, signature) => {
         }, { transaction: t });
 
         logger.info(`Session fee payment ${actualTransaction.id} completed for appointment ${appointment.id}`);
+        
+        // Create payment notifications for session fee
+        try {
+          const { Patient } = require('../models');
+          const fullAppointment = await Appointment.findByPk(appointment.id, {
+            include: [
+              { model: Patient, include: [{ model: User }] },
+              { model: Caregiver, include: [{ model: User }] }
+            ]
+          });
+          
+          await NotificationHelper.createPaymentNotifications({
+            id: actualTransaction.id,
+            patientId: fullAppointment?.Patient?.User?.id,
+            caregiverId: fullAppointment?.Caregiver?.User?.id,
+            amount: actualTransaction.amount,
+            caregiverEarnings: actualTransaction.caregiverEarnings,
+            status: 'completed',
+            paymentType: 'session_fee',
+            region: fullAppointment?.Caregiver?.region
+          });
+        } catch (notificationError) {
+          console.error('Failed to create session fee payment notifications:', notificationError);
+        }
       } else {
         // Invalid pending transaction state
         throw new Error(`Invalid pending transaction: missing both pendingBookingId and appointmentId for tx_ref ${tx_ref}`);

@@ -17,6 +17,8 @@ const availabilityRoutes = require('./availability.routes');
 const locationRoutes = require('./location.routes');
 const careReportRoutes = require('./careReport.routes');
 const meetingRoutes = require('./meeting.routes');
+const configRoutes = require('./config.routes');
+const notificationRoutes = require('./notification.routes');
 
 const router = express.Router();
 
@@ -38,5 +40,7 @@ router.use('/availability', availabilityRoutes);
 router.use('/locations', locationRoutes);
 router.use('/care-reports', careReportRoutes);
 router.use('/meeting', meetingRoutes);
+router.use('/config', configRoutes);
+router.use('/notifications', notificationRoutes);
 
 module.exports = router;

@@ -1,6 +1,7 @@
 const { Appointment, Patient, Caregiver, User, Specialty, TimeSlot } = require('../models');
 const { APPOINTMENT_STATUS, USER_ROLES, TIMESLOT_STATUS, PAYMENT_STATUS } = require('../utils/constants');
 const { sendAppointmentConfirmation } = require('../services/emailService');
+const NotificationHelper = require('../utils/notificationHelper');
 
 /**
  * @deprecated This endpoint is deprecated and should not be used for new bookings
@@ -181,6 +182,21 @@ const updateAppointmentStatus = async (req, res, next) => {
 
     appointment.status = status;
     await appointment.save();
+
+    // Create notifications for appointment status change
+    try {
+      if (status === APPOINTMENT_STATUS.CONFIRMED) {
+        await NotificationHelper.createAppointmentNotifications({
+          id: appointment.id,
+          caregiverId: appointment.caregiverId,
+          patientId: appointment.patientId,
+          date: new Date(appointment.scheduledDate).toLocaleDateString(),
+          time: appointment.TimeSlot?.startTime || 'TBD'
+        });
+      }
+    } catch (notificationError) {
+      console.error('Failed to create appointment notifications:', notificationError);
+    }
 
     // If cancelled, free up the time slot
     if (status === APPOINTMENT_STATUS.CANCELLED && appointment.TimeSlot) {
