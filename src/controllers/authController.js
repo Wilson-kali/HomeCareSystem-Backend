@@ -299,6 +299,8 @@ const login = async (req, res, next) => {
     const { email, password } = req.body;
     const { Permission } = require('../models');
 
+    console.log('🔐 Login attempt for:', email);
+
     const user = await User.findOne({ 
       where: { email },
       include: [{
@@ -313,24 +315,40 @@ const login = async (req, res, next) => {
       }]
     });
     
-    if (!user || !user.isActive) {
+    if (!user) {
+      console.log('❌ User not found for email:', email);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+
+    if (!user.isActive) {
+      console.log('❌ User account is inactive:', email);
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    console.log('✅ User found and active:', email);
+    console.log('🔍 Stored password hash length:', user.password?.length);
+    console.log('🔍 Input password length:', password?.length);
 
     // Additional validation for caregivers
     if (user.Role?.name === 'caregiver') {
       if (!user.Caregiver || user.Caregiver.verificationStatus !== 'APPROVED') {
+        console.log('❌ Caregiver not verified:', email);
         return res.status(401).json({ 
           error: 'Account pending verification. Please wait for admin approval.' 
         });
       }
     }
 
+    console.log('🔐 Comparing passwords...');
     const isValidPassword = await bcrypt.compare(password, user.password);
+    console.log('🔍 Password comparison result:', isValidPassword);
+    
     if (!isValidPassword) {
+      console.log('❌ Password comparison failed for:', email);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    console.log('✅ Login successful for:', email);
     const token = generateToken(user.id);
     const sanitizedUser = sanitizeUser(user);
     
@@ -343,6 +361,7 @@ const login = async (req, res, next) => {
       user: sanitizedUser
     });
   } catch (error) {
+    console.error('💥 Login error:', error);
     next(error);
   }
 };
@@ -423,43 +442,48 @@ const forgotPassword = async (req, res, next) => {
   }
 };
 
-const resetPassword = async (req, res, next) => {
-  try {
-    const { token, password } = req.body;
+const resetPassword = asyncHandler(async (req, res, next) => {
+  const { token, password } = req.body;
 
-    if (!token || !password) {
-      return res.status(400).json({ error: 'Token and password are required' });
-    }
-
-    // Find user with valid reset token
-    const user = await User.findOne({
-      where: {
-        resetPasswordToken: token,
-        resetPasswordExpires: {
-          [require('sequelize').Op.gt]: new Date()
-        }
-      }
-    });
-
-    if (!user) {
-      return res.status(400).json({ error: 'Invalid or expired reset token' });
-    }
-
-    // Hash new password
-    const hashedPassword = await bcrypt.hash(password, bcryptRounds);
-
-    // Update user password and clear reset token
-    await user.update({
-      password: hashedPassword,
-      resetPasswordToken: null,
-      resetPasswordExpires: null
-    });
-
-    res.json({ message: 'Password reset successfully' });
-  } catch (error) {
-    next(error);
+  if (!token || !password) {
+    return res.status(400).json({ error: 'Token and password are required' });
   }
-};
+
+  console.log('🔄 Password reset attempt for token:', token.substring(0, 10) + '...');
+
+  // Find user with valid reset token
+  const user = await User.findOne({
+    where: {
+      resetPasswordToken: token,
+      resetPasswordExpires: {
+        [require('sequelize').Op.gt]: new Date()
+      }
+    }
+  });
+
+  if (!user) {
+    console.log('❌ Invalid or expired token');
+    return res.status(400).json({ error: 'Invalid or expired reset token' });
+  }
+
+  console.log('✅ Valid token found for user:', user.email);
+
+  // Hash new password with explicit salt rounds
+  const hashedPassword = await bcrypt.hash(password, parseInt(bcryptRounds) || 12);
+  console.log('🔐 Password hashed successfully with salt rounds:', parseInt(bcryptRounds) || 12);
+  console.log('🔍 New hash length:', hashedPassword.length);
+
+  // Update user password and clear reset token
+  const updateResult = await user.update({
+    password: hashedPassword,
+    resetPasswordToken: null,
+    resetPasswordExpires: null
+  });
+
+  console.log('💾 Password updated in database:', !!updateResult);
+
+  res.json({ message: 'Password reset successfully' });
+});
 
 module.exports = {
   register,
