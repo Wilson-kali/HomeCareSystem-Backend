@@ -60,6 +60,15 @@ const TimeSlot = sequelize.define('TimeSlot', {
       model: 'Appointments',
       key: 'id'
     }
+  },
+  availabilityId: {
+    type: DataTypes.INTEGER,
+    allowNull: true,
+    references: {
+      model: 'CaregiverAvailabilities',
+      key: 'id'
+    },
+    comment: 'Links time slot to the availability that generated it'
   }
 }, {
   tableName: 'time_slots',

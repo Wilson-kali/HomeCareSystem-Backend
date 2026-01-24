@@ -74,13 +74,39 @@ const Caregiver = sequelize.define('Caregiver', {
     allowNull: true
   },
   traditionalAuthority: {
-    type: DataTypes.STRING,
+    type: DataTypes.JSON,
     allowNull: true,
-    field: 'traditional_authority'
+    field: 'traditional_authority',
+    comment: 'Array of Traditional Authorities the caregiver serves',
+    get() {
+      const value = this.getDataValue('traditionalAuthority');
+      if (!value) return [];
+      if (typeof value === 'string') {
+        try {
+          return JSON.parse(value);
+        } catch {
+          return [value]; // Convert legacy single value to array
+        }
+      }
+      return Array.isArray(value) ? value : [value];
+    }
   },
   village: {
-    type: DataTypes.STRING,
-    allowNull: true
+    type: DataTypes.JSON,
+    allowNull: true,
+    comment: 'Array of Villages the caregiver serves',
+    get() {
+      const value = this.getDataValue('village');
+      if (!value) return [];
+      if (typeof value === 'string') {
+        try {
+          return JSON.parse(value);
+        } catch {
+          return [value]; // Convert legacy single value to array
+        }
+      }
+      return Array.isArray(value) ? value : [value];
+    }
   }
 }, {
   tableName: 'caregivers'

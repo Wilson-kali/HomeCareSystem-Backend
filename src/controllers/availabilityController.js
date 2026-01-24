@@ -27,7 +27,23 @@ const validateTimeSlot = (slot) => {
     errors.push('startTime must be before endTime');
   }
 
+  // Validate minimum duration based on DEFAULT_APPOINTMENT_DURATION
+  const minDurationMinutes = parseInt(process.env.DEFAULT_APPOINTMENT_DURATION) || 180;
+  const startMinutes = timeToMinutes(slot.startTime);
+  const endMinutes = timeToMinutes(slot.endTime);
+  const durationMinutes = endMinutes - startMinutes;
+  
+  if (durationMinutes < minDurationMinutes) {
+    errors.push(`Availability window must be at least ${minDurationMinutes} minutes (${Math.floor(minDurationMinutes/60)}h ${minDurationMinutes%60}m). Current duration: ${durationMinutes} minutes`);
+  }
+
   return errors;
+};
+
+// Helper function to convert time string to minutes
+const timeToMinutes = (timeStr) => {
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  return hours * 60 + minutes;
 };
 
 // Helper function to check for time conflicts
@@ -139,8 +155,25 @@ const getAvailability = async (req, res, next) => {
       order: [['dayOfWeek', 'ASC'], ['startTime', 'ASC']]
     });
 
-    console.log(`✅ Found ${availability.length} availability slots`);
-    res.json({ availability });
+    // Check time slots per availability slot
+    const { TimeSlot } = require('../models');
+    const availabilityWithSlotInfo = await Promise.all(
+      availability.map(async (avail) => {
+        const slotCount = await TimeSlot.count({
+          where: { availabilityId: avail.id }
+        });
+        return {
+          ...avail.toJSON(),
+          hasTimeSlots: slotCount > 0,
+          timeSlotCount: slotCount
+        };
+      })
+    );
+
+    console.log(`✅ Found ${availability.length} availability slots with time slot info`);
+    res.json({
+      availability: availabilityWithSlotInfo
+    });
   } catch (error) {
     console.error('❌ Error getting availability:', error);
     next(error);
@@ -213,12 +246,6 @@ const deleteAvailability = async (req, res, next) => {
       return res.status(403).json({ error: 'Caregiver profile not found' });
     }
 
-    console.log('✅ Found caregiver:', {
-      id: caregiver.id,
-      userId: caregiver.userId,
-      dataValues: caregiver.dataValues
-    });
-
     if (!caregiver.id || caregiver.id === 0) {
       console.log('❌ Invalid caregiver ID:', caregiver.id);
       return res.status(500).json({
@@ -227,6 +254,12 @@ const deleteAvailability = async (req, res, next) => {
         userId: caregiver.userId
       });
     }
+
+    // Delete related time slots first
+    const { TimeSlot } = require('../models');
+    const deletedSlots = await TimeSlot.destroy({
+      where: { availabilityId: id }
+    });
 
     const deleted = await CaregiverAvailability.destroy({
       where: { id, caregiverId: caregiver.id }
@@ -237,8 +270,11 @@ const deleteAvailability = async (req, res, next) => {
       return res.status(404).json({ error: 'Availability slot not found' });
     }
 
-    console.log('✅ Deleted availability slot:', id);
-    res.json({ message: 'Availability slot deleted successfully' });
+    console.log(`✅ Deleted availability slot: ${id} and ${deletedSlots} related time slots`);
+    res.json({ 
+      message: 'Availability slot deleted successfully',
+      deletedTimeSlots: deletedSlots
+    });
   } catch (error) {
     console.error('❌ Error deleting availability:', error);
     next(error);
@@ -284,9 +320,11 @@ const setAvailability = async (req, res, next) => {
       }
     }
 
-    // Clear existing availability
+    // Clear existing availability and time slots
+    const { TimeSlot } = require('../models');
+    const deletedSlots = await TimeSlot.destroy({ where: { caregiverId: caregiver.id } });
     const deletedCount = await CaregiverAvailability.destroy({ where: { caregiverId: caregiver.id } });
-    console.log(`🗑️ Deleted ${deletedCount} existing availability slots`);
+    console.log(`🗑️ Deleted ${deletedCount} existing availability slots and ${deletedSlots} time slots`);
 
     // Create new availability if any
     if (availability.length > 0) {
@@ -331,12 +369,6 @@ const clearAllAvailability = async (req, res, next) => {
       return res.status(403).json({ error: 'Caregiver profile not found' });
     }
 
-    console.log('✅ Found caregiver:', {
-      id: caregiver.id,
-      userId: caregiver.userId,
-      dataValues: caregiver.dataValues
-    });
-
     if (!caregiver.id || caregiver.id === 0) {
       console.log('❌ Invalid caregiver ID:', caregiver.id);
       return res.status(500).json({
@@ -346,15 +378,22 @@ const clearAllAvailability = async (req, res, next) => {
       });
     }
 
+    // Delete all related time slots first
+    const { TimeSlot } = require('../models');
+    const deletedSlots = await TimeSlot.destroy({
+      where: { caregiverId: caregiver.id }
+    });
+
     const deletedCount = await CaregiverAvailability.destroy({
       where: { caregiverId: caregiver.id }
     });
 
-    console.log(`✅ Deleted ${deletedCount} availability slots`);
+    console.log(`✅ Deleted ${deletedCount} availability slots and ${deletedSlots} time slots`);
 
     res.json({
       message: 'All availability cleared successfully',
-      deleted: deletedCount
+      deleted: deletedCount,
+      deletedTimeSlots: deletedSlots
     });
   } catch (error) {
     console.error('❌ Error clearing availability:', error);

@@ -282,6 +282,7 @@ const sendCaregiverRegistrationNotification = async (email, firstName) => {
 
 const sendCaregiverVerificationNotification = async (email, firstName) => {
   const systemName = process.env.SYSTEM || 'CareConnect';
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
   const subject = `Account Verified - ${systemName}`;
   const html = `
     <!DOCTYPE html>
@@ -293,6 +294,9 @@ const sendCaregiverVerificationNotification = async (email, firstName) => {
         .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; background: #e8f5e8; }
         .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: #2e7d32; }
         .content { padding: 30px 20px; }
+        .action-box { padding: 20px; border: 2px solid #047857; border-radius: 8px; margin: 20px 0; background: #f0fdf4; }
+        .action-box h3 { margin: 0 0 10px 0; color: #047857; font-size: 16px; }
+        .button { display: inline-block; background: #047857; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 10px 0; font-size: 14px; font-weight: 500; }
         .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
       </style>
     </head>
@@ -305,6 +309,15 @@ const sendCaregiverVerificationNotification = async (email, firstName) => {
           <p>Dear ${firstName},</p>
           <p>Congratulations! Your caregiver credentials have been successfully verified by our administrative team.</p>
           <p>Your account is now fully verified and you can start providing healthcare services through ${systemName}.</p>
+
+          <div class="action-box">
+            <h3>📅 Important: Set Your Availability</h3>
+            <p>To start receiving appointment bookings, please log in to your account and set your availability schedule. Patients can only book appointments during your available time slots.</p>
+            <center>
+              <a href="${frontendUrl}/dashboard/schedule" class="button" style="color: white !important;">Set Your Availability</a>
+            </center>
+          </div>
+
           <p>Welcome to our healthcare community!</p>
           <p>Best regards,<br>${systemName} Team</p>
         </div>
@@ -1213,6 +1226,62 @@ const sendDataProtectionNotification = async (userData) => {
   return sendEmail(email, subject, html);
 };
 
+// Send custom message from system manager to caregiver
+const sendCustomMessageToCaregiver = async (caregiverEmail, caregiverFirstName, senderName, subject, messageContent) => {
+  const systemName = process.env.SYSTEM || 'CareConnect';
+  const emailSubject = `${subject} - ${systemName}`;
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 20px auto; background: white; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; background: #f0f8ff; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: #1976d2; }
+        .content { padding: 30px 20px; }
+        .message-box { padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; margin: 20px 0; background: #fafafa; white-space: pre-wrap; }
+        .from-box { padding: 15px; border-left: 4px solid #1976d2; margin: 20px 0; background: #f0f8ff; }
+        .button { display: inline-block; background: #1976d2; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; margin: 20px 0; font-size: 14px; font-weight: 500; }
+        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>📧 Message from ${systemName}</h1>
+        </div>
+        <div class="content">
+          <p>Dear ${caregiverFirstName},</p>
+
+          <div class="from-box">
+            <strong>From:</strong> ${senderName} (System Manager)
+          </div>
+
+          <div class="message-box">
+${messageContent}
+          </div>
+
+          <p>If you have any questions or need further clarification, please log in to your account or contact support.</p>
+
+          <center>
+            <a href="${frontendUrl}/dashboard" class="button" style="color: white !important;">Go to Dashboard</a>
+          </center>
+        </div>
+        <div class="footer">
+          <p>© ${new Date().getFullYear()} ${systemName}. All rights reserved.</p>
+          <p>This message was sent by the ${systemName} administrative team.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail(caregiverEmail, emailSubject, html);
+};
+
 module.exports = {
   sendEmail,
   sendAppointmentConfirmation,
@@ -1230,5 +1299,6 @@ module.exports = {
   sendRescheduleNotification,
   sendCancellationNotification,
   sendUserWelcomeEmail,
-  sendDataProtectionNotification
+  sendDataProtectionNotification,
+  sendCustomMessageToCaregiver
 };

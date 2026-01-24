@@ -1,12 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { generateTimeSlots, getAvailableSlots, getCaregiverTimeSlots, updateTimeSlotPrice, bulkUpdateTimeSlotPrices, lockSlot, unlockSlot } = require('../controllers/timeSlotController');
+const { generateTimeSlots, generateTimeSlotsForAvailability, getAvailableSlots, getCaregiverTimeSlots, updateTimeSlotPrice, bulkUpdateTimeSlotPrices, lockSlot, unlockSlot } = require('../controllers/timeSlotController');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const { requireRole } = require('../middleware/roleCheck.middleware');
 const { USER_ROLES } = require('../utils/constants');
 
-// Generate time slots (caregiver only)
+// Generate time slots for all availability (caregiver only)
 router.post('/generate', authenticateToken, requireRole([USER_ROLES.CAREGIVER]), generateTimeSlots);
+
+// Generate time slots for specific availability (caregiver only)
+router.post('/generate-for-availability', authenticateToken, requireRole([USER_ROLES.CAREGIVER]), generateTimeSlotsForAvailability);
 
 // Get available slots (public)
 router.get('/available', getAvailableSlots);

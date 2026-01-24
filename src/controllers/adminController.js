@@ -839,6 +839,59 @@ const createUser = async (req, res, next) => {
   }
 };
 
+// Send custom email to caregiver
+const sendEmailToCaregiver = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    const { subject, message } = req.body;
+
+    if (!subject || subject.trim() === '') {
+      return res.status(400).json({ error: 'Email subject is required' });
+    }
+
+    if (!message || message.trim() === '') {
+      return res.status(400).json({ error: 'Email message is required' });
+    }
+
+    const user = await User.findByPk(userId, {
+      include: [{ model: Caregiver }, { model: Role }]
+    });
+
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!user.Caregiver) {
+      return res.status(400).json({ error: 'User is not a caregiver' });
+    }
+
+    // Get current user (sender) name
+    const sender = await User.findByPk(req.user.id);
+    const senderName = `${sender.firstName} ${sender.lastName}`;
+
+    // Send email
+    const { sendCustomMessageToCaregiver } = require('../services/emailService');
+    await sendCustomMessageToCaregiver(
+      user.email,
+      user.firstName,
+      senderName,
+      subject.trim(),
+      message.trim()
+    );
+
+    res.json({
+      message: 'Email sent successfully to ' + user.email,
+      recipient: {
+        id: user.id,
+        name: `${user.firstName} ${user.lastName}`,
+        email: user.email
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getPendingCaregivers,
   verifyCaregiver,
@@ -850,5 +903,6 @@ module.exports = {
   updateUser,
   getAllPermissions,
   updateRolePermissions,
-  createUser
+  createUser,
+  sendEmailToCaregiver
 };
