@@ -69,12 +69,17 @@ router.get('/caregivers', async (req, res, next) => {
       specialtyInclude.required = true; // Inner join to only get caregivers with this specialty
     }
 
+    // Determine if Caregiver join should be required (INNER JOIN)
+    // Required when: location filters are applied OR specialty filter is applied
+    const hasLocationFilters = Object.keys(caregiverWhereClause).length > 0;
+    const caregiverRequired = hasLocationFilters || specialtyId;
+
     const { count, rows: caregivers } = await User.findAndCountAll({
       where: userWhereClause,
       include: [
         {
           model: Caregiver,
-          required: false, // Left join to include all users even without caregiver profile
+          required: caregiverRequired, // INNER JOIN when filters applied, LEFT JOIN otherwise
           where: Object.keys(caregiverWhereClause).length > 0 ? caregiverWhereClause : undefined,
           attributes: [
             'id',
