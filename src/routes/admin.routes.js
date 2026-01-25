@@ -500,18 +500,42 @@ router.get('/caregivers/:caregiverId/transactions', async (req, res, next) => {
   }
 });
 
-router.delete('/users/:userId', async (req, res, next) => {
+router.delete('/users/:userId', requirePermission('approve_caregivers'), async (req, res, next) => {
   try {
-    const { User } = require('../models');
-    const user = await User.findByPk(req.params.userId);
+    const { User, Caregiver, Role } = require('../models');
+
+    const user = await User.findByPk(req.params.userId, {
+      include: [
+        { model: Role },
+        { model: Caregiver }
+      ]
+    });
 
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    // Only allow deletion of rejected caregivers
+    if (user.Role?.name === 'caregiver' && user.Caregiver) {
+      if (user.Caregiver.verificationStatus !== 'REJECTED') {
+        return res.status(403).json({
+          error: 'Only rejected caregivers can be deleted',
+          verificationStatus: user.Caregiver.verificationStatus
+        });
+      }
+    } else {
+      return res.status(403).json({
+        error: 'Only caregivers can be deleted through this endpoint'
+      });
+    }
+
+    // Delete the user (cascade will delete associated caregiver record)
     await user.destroy();
 
-    res.json({ message: 'User deleted successfully' });
+    res.json({
+      success: true,
+      message: `User ${user.firstName} ${user.lastName} deleted successfully`
+    });
   } catch (error) {
     next(error);
   }

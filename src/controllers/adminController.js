@@ -213,10 +213,20 @@ const getAllUsers = async (req, res, next) => {
       roleWhere.name = { [Op.in]: allowedRoles };
     }
     
+    // Handle status filter
+    let caregiverStatusWhere = {};
     if (status && status !== 'all') {
-      userWhere.isActive = status === 'active';
+      if (status === 'rejected') {
+        // For rejected status, filter caregivers with REJECTED verification status
+        caregiverStatusWhere.verificationStatus = 'REJECTED';
+        // Only show caregivers for rejected status
+        roleWhere.name = 'caregiver';
+      } else {
+        // For active/inactive, filter by user's isActive status
+        userWhere.isActive = status === 'active';
+      }
     }
-    
+
     // Add region filtering for regional managers and accountants
     let regionFilter = null;
     if (currentUser.Role?.name === 'regional_manager' || currentUser.Role?.name === 'Accountant') {
@@ -229,25 +239,31 @@ const getAllUsers = async (req, res, next) => {
     console.log('Role where:', roleWhere);
     
     // Build query with region filtering at database level
+    // Merge caregiver filters (region + verification status)
+    let caregiverWhere = { ...caregiverStatusWhere };
+    if (regionFilter) {
+      caregiverWhere.region = regionFilter;
+    }
+
     const queryOptions = {
       where: userWhere,
       include: [
-        { 
-          model: Role, 
+        {
+          model: Role,
           where: roleWhere,
           required: true
         },
-        { 
-          model: Caregiver, 
-          required: false,
-          where: regionFilter ? { region: regionFilter } : undefined,
+        {
+          model: Caregiver,
+          required: status === 'rejected' ? true : false, // Make required for rejected status
+          where: Object.keys(caregiverWhere).length > 0 ? caregiverWhere : undefined,
           include: specialty && specialty !== 'all' ? [{
             model: Specialty,
             where: { id: specialty },
             through: { attributes: [] },
             required: true
           }] : [{
-            model: Specialty, 
+            model: Specialty,
             through: { attributes: [] },
             required: false
           }]
@@ -300,7 +316,8 @@ const getAllUsers = async (req, res, next) => {
             WHERE r.name IN (:allowedRoles)
             AND (${regionConditions.join(' OR ')})
             ${search ? 'AND (u.firstName LIKE :search OR u.lastName LIKE :search OR u.email LIKE :search)' : ''}
-            ${status && status !== 'all' ? 'AND u.isActive = :isActive' : ''}
+            ${status && status !== 'all' && status !== 'rejected' ? 'AND u.isActive = :isActive' : ''}
+            ${status === 'rejected' ? 'AND c.verificationStatus = \'REJECTED\'' : ''}
             ORDER BY u.createdAt DESC
             LIMIT :limit OFFSET :offset
           `, {
@@ -308,7 +325,7 @@ const getAllUsers = async (req, res, next) => {
               allowedRoles: rolesBeingQueried,
               regionFilter,
               ...(search && { search: `%${search}%` }),
-              ...(status && status !== 'all' && { isActive: status === 'active' }),
+              ...(status && status !== 'all' && status !== 'rejected' && { isActive: status === 'active' }),
               limit: parseInt(limit),
               offset
             },
@@ -331,13 +348,14 @@ const getAllUsers = async (req, res, next) => {
             WHERE r.name IN (:allowedRoles)
             AND (${regionConditions.join(' OR ')})
             ${search ? 'AND (u.firstName LIKE :search OR u.lastName LIKE :search OR u.email LIKE :search)' : ''}
-            ${status && status !== 'all' ? 'AND u.isActive = :isActive' : ''}
+            ${status && status !== 'all' && status !== 'rejected' ? 'AND u.isActive = :isActive' : ''}
+            ${status === 'rejected' ? 'AND c.verificationStatus = \'REJECTED\'' : ''}
           `, {
             replacements: {
               allowedRoles: rolesBeingQueried,
               regionFilter,
               ...(search && { search: `%${search}%` }),
-              ...(status && status !== 'all' && { isActive: status === 'active' })
+              ...(status && status !== 'all' && status !== 'rejected' && { isActive: status === 'active' })
             },
             type: sequelize.QueryTypes.SELECT
           });
