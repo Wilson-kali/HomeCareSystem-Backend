@@ -397,18 +397,32 @@ const processWebhook = async (webhookData, signature) => {
             logger.info(`Payment confirmation email sent to patient: ${fullAppointment.Patient.User.email}`);
           }
 
-          // Send new appointment notification to caregiver
+          // Send appropriate notification to caregiver based on payment type
           if (fullAppointment?.Caregiver?.User?.email) {
-            await sendCaregiverAppointmentNotification(fullAppointment.Caregiver.User.email, {
-              caregiverName: `${fullAppointment.Caregiver.User.firstName} ${fullAppointment.Caregiver.User.lastName}`,
-              patientName: `${fullAppointment.Patient.User.firstName} ${fullAppointment.Patient.User.lastName}`,
-              scheduledDate: fullAppointment.scheduledDate,
-              sessionType: fullAppointment.sessionType,
-              duration: fullAppointment.duration,
-              notes: fullAppointment.notes,
-              jitsiMeetingUrl: caregiverMeetingUrl
-            });
-            logger.info(`New appointment notification sent to caregiver: ${fullAppointment.Caregiver.User.email}`);
+            if (pendingTransaction.paymentType === 'booking_fee') {
+              // For booking fee: send appointment notification
+              await sendCaregiverAppointmentNotification(fullAppointment.Caregiver.User.email, {
+                caregiverName: `${fullAppointment.Caregiver.User.firstName} ${fullAppointment.Caregiver.User.lastName}`,
+                patientName: `${fullAppointment.Patient.User.firstName} ${fullAppointment.Patient.User.lastName}`,
+                scheduledDate: fullAppointment.scheduledDate,
+                sessionType: fullAppointment.sessionType,
+                duration: fullAppointment.duration,
+                notes: fullAppointment.notes,
+                jitsiMeetingUrl: caregiverMeetingUrl
+              });
+              logger.info(`New appointment notification sent to caregiver: ${fullAppointment.Caregiver.User.email}`);
+            } else if (pendingTransaction.paymentType === 'session_fee') {
+              // For session fee: send payment confirmation (caregiver earns money)
+              await sendPaymentConfirmation(fullAppointment.Caregiver.User.email, {
+                patientName: `${fullAppointment.Patient.User.firstName} ${fullAppointment.Patient.User.lastName}`,
+                amount: pendingTransaction.amount,
+                transactionId: tx_ref,
+                appointmentDate: fullAppointment.TimeSlot?.date || fullAppointment.scheduledDate,
+                caregiverName: `${fullAppointment.Caregiver.User.firstName} ${fullAppointment.Caregiver.User.lastName}`,
+                jitsiMeetingUrl: caregiverMeetingUrl
+              });
+              logger.info(`Session fee payment confirmation sent to caregiver: ${fullAppointment.Caregiver.User.email}`);
+            }
           }
         } catch (emailError) {
           logger.error('Failed to send payment confirmation email:', emailError);
