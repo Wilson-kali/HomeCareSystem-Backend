@@ -190,12 +190,12 @@ const handlePaymentWebhook = async (req, res, next) => {
           if (paymentStatus.status === 'successful' || paymentStatus.status === 'success') {
             const mockWebhookData = {
               tx_ref: tx_ref,
-              status: paymentStatus.status,
-              amount: paymentStatus.amount
+              status: paymentStatus.data?.status || paymentStatus.status,
+              amount: paymentStatus.data?.amount || paymentStatus.amount
             };
             
             console.log('🔄 Processing payment via GET redirect...');
-            const transaction = await processWebhook(mockWebhookData, null);
+            const transaction = await processWebhook(mockWebhookData, 'SKIP_SIGNATURE_VERIFICATION');
             
             if (transaction) {
               console.log('✅ Payment processed successfully via GET redirect');

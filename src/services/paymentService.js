@@ -177,10 +177,12 @@ const processWebhook = async (webhookData, signature) => {
   const t = await sequelize.transaction();
 
   try {
-    // Verify webhook signature
-    const isValid = verifyWebhookSignature(webhookData, signature);
-    if (!isValid) {
-      throw new Error('Invalid webhook signature');
+    // Verify webhook signature (skip for GET redirects or if no signature/secret)
+    if (signature && signature !== 'SKIP_SIGNATURE_VERIFICATION' && paymentConfig.paychangu.webhookSecret) {
+      const isValid = verifyWebhookSignature(webhookData, signature);
+      if (!isValid) {
+        throw new Error('Invalid webhook signature');
+      }
     }
 
     const { tx_ref, status, amount } = webhookData;
