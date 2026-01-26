@@ -12,6 +12,7 @@ const {
 const router = express.Router();
 
 // Webhook endpoint (no auth required)
+router.get('/webhook', handlePaymentWebhook);
 router.post('/webhook', handlePaymentWebhook);
 
 // Authenticated routes

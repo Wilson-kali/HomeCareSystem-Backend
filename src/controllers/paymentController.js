@@ -179,8 +179,39 @@ const handlePaymentWebhook = async (req, res, next) => {
       const tx_ref = req.query.tx_ref;
       if (tx_ref) {
         console.log('🔍 GET request with tx_ref:', tx_ref);
-        // Redirect to frontend success page
-        return res.redirect(`${process.env.FRONTEND_URL}/dashboard/billing?status=success&tx_ref=${tx_ref}`);
+        
+        // ✅ SECURE: Verify payment status with Paychangu
+        try {
+          console.log('🔍 Verifying payment with Paychangu API...');
+          const paymentStatus = await verifyPayment(tx_ref);
+          console.log('💳 Payment verification result:', paymentStatus);
+          
+          // Process payment if successful
+          if (paymentStatus.status === 'successful' || paymentStatus.status === 'success') {
+            const mockWebhookData = {
+              tx_ref: tx_ref,
+              status: paymentStatus.status,
+              amount: paymentStatus.amount
+            };
+            
+            console.log('🔄 Processing payment via GET redirect...');
+            const transaction = await processWebhook(mockWebhookData, null);
+            
+            if (transaction) {
+              console.log('✅ Payment processed successfully via GET redirect');
+              return res.redirect(`${process.env.FRONTEND_URL}/dashboard/billing?status=success&tx_ref=${tx_ref}`);
+            } else {
+              console.log('❌ Payment processing failed');
+              return res.redirect(`${process.env.FRONTEND_URL}/dashboard/billing?status=failed&tx_ref=${tx_ref}`);
+            }
+          } else {
+            console.log('❌ Payment verification failed - status:', paymentStatus.status);
+            return res.redirect(`${process.env.FRONTEND_URL}/dashboard/billing?status=failed&tx_ref=${tx_ref}`);
+          }
+        } catch (error) {
+          console.error('❌ Payment verification failed:', error);
+          return res.redirect(`${process.env.FRONTEND_URL}/dashboard/billing?status=failed&tx_ref=${tx_ref}`);
+        }
       }
       return res.status(200).json({ message: 'Webhook endpoint active' });
     }
