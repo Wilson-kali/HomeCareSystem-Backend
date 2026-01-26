@@ -373,12 +373,12 @@ const processWebhook = async (webhookData, signature) => {
             ]
           });
 
-          // Construct magic links for both participants
+          // Construct magic links only for teleconference sessions
           const appUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
-          const patientMeetingUrl = fullAppointment.patientMeetingToken
+          const patientMeetingUrl = fullAppointment.sessionType === 'teleconference' && fullAppointment.patientMeetingToken
             ? `${appUrl}/meeting/join/${fullAppointment.patientMeetingToken}`
             : null;
-          const caregiverMeetingUrl = fullAppointment.caregiverMeetingToken
+          const caregiverMeetingUrl = fullAppointment.sessionType === 'teleconference' && fullAppointment.caregiverMeetingToken
             ? `${appUrl}/meeting/join/${fullAppointment.caregiverMeetingToken}`
             : null;
 

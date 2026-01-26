@@ -251,28 +251,35 @@ class BookingService {
       // Create appointment first to get the ID
       const appointment = await Appointment.create(appointmentData, { transaction: t });
 
-      // Generate Jitsi meeting link for all appointments
-      const jitsiMeeting = generateJitsiMeeting(
-        appointment.id,
-        pendingBooking.patientId,
-        pendingBooking.caregiverId
-      );
+      // Only generate Jitsi meeting link for teleconference appointments
+      if (pendingBooking.sessionType === 'teleconference') {
+        const jitsiMeeting = generateJitsiMeeting(
+          appointment.id,
+          pendingBooking.patientId,
+          pendingBooking.caregiverId
+        );
 
-      // Update appointment with Jitsi details and magic link tokens
-      await appointment.update({
-        jitsiRoomName: jitsiMeeting.roomName,
-        jitsiMeetingUrl: jitsiMeeting.meetingUrl,
-        patientMeetingToken: jitsiMeeting.patientToken,
-        caregiverMeetingToken: jitsiMeeting.caregiverToken
-      }, { transaction: t });
+        // Update appointment with Jitsi details and magic link tokens
+        await appointment.update({
+          jitsiRoomName: jitsiMeeting.roomName,
+          jitsiMeetingUrl: jitsiMeeting.meetingUrl,
+          patientMeetingToken: jitsiMeeting.patientToken,
+          caregiverMeetingToken: jitsiMeeting.caregiverToken
+        }, { transaction: t });
 
-      logger.info('Jitsi meeting created for appointment', {
-        appointmentId: appointment.id,
-        sessionType: pendingBooking.sessionType,
-        roomName: jitsiMeeting.roomName,
-        patientMeetingUrl: jitsiMeeting.patientMeetingUrl,
-        caregiverMeetingUrl: jitsiMeeting.caregiverMeetingUrl
-      });
+        logger.info('Jitsi meeting created for teleconference appointment', {
+          appointmentId: appointment.id,
+          sessionType: pendingBooking.sessionType,
+          roomName: jitsiMeeting.roomName,
+          patientMeetingUrl: jitsiMeeting.patientMeetingUrl,
+          caregiverMeetingUrl: jitsiMeeting.caregiverMeetingUrl
+        });
+      } else {
+        logger.info('Skipping Jitsi meeting creation for in-person appointment', {
+          appointmentId: appointment.id,
+          sessionType: pendingBooking.sessionType
+        });
+      }
 
       // Update pending booking status
       await pendingBooking.update({
