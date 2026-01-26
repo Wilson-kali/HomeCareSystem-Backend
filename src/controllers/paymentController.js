@@ -159,43 +159,86 @@ const verifyPaymentStatus = async (req, res, next) => {
  * POST /api/payments/webhook
  */
 const handlePaymentWebhook = async (req, res, next) => {
+  // Log everything coming in
+  console.log('🔔 WEBHOOK RECEIVED - FULL REQUEST DETAILS:');
+  console.log('Method:', req.method);
+  console.log('URL:', req.url);
+  console.log('Query Params:', req.query);
+  console.log('Headers:', JSON.stringify(req.headers, null, 2));
+  console.log('Body:', JSON.stringify(req.body, null, 2));
+  console.log('Raw Body Type:', typeof req.body);
+  console.log('Content-Type:', req.headers['content-type']);
+  console.log('User-Agent:', req.headers['user-agent']);
+  console.log('Referer:', req.headers['referer']);
+  console.log('IP:', req.ip || req.connection.remoteAddress);
+  
   try {
-    console.log('🔔 Webhook received:', {
-      headers: req.headers,
-      body: req.body,
-      method: req.method,
-      url: req.url
-    });
+    // Handle both GET and POST requests
+    if (req.method === 'GET') {
+      console.log('⚠️ Received GET request - this might be a redirect, not a webhook');
+      const tx_ref = req.query.tx_ref;
+      if (tx_ref) {
+        console.log('🔍 GET request with tx_ref:', tx_ref);
+        // Redirect to frontend success page
+        return res.redirect(`${process.env.FRONTEND_URL}/dashboard/billing?status=success&tx_ref=${tx_ref}`);
+      }
+      return res.status(200).json({ message: 'Webhook endpoint active' });
+    }
 
     const webhookData = req.body;
-    const signature = req.headers['x-paychangu-signature'] || req.headers['x-webhook-signature'] || req.headers['signature'];
+    
+    // Validate webhook data structure
+    if (!webhookData || typeof webhookData !== 'object') {
+      console.log('❌ Invalid webhook data structure');
+      return res.status(400).json({ error: 'Invalid webhook data' });
+    }
+
+    if (!webhookData.tx_ref) {
+      console.log('❌ Missing tx_ref in webhook data');
+      return res.status(400).json({ error: 'Missing transaction reference' });
+    }
+
+    // Try multiple possible signature header names
+    const signature = req.headers['x-paychangu-signature'] || 
+                     req.headers['x-webhook-signature'] || 
+                     req.headers['signature'] ||
+                     req.headers['x-signature'] ||
+                     req.headers['paychangu-signature'];
 
     console.log('📋 Webhook details:', {
       hasSignature: !!signature,
       signature: signature,
-      dataKeys: Object.keys(webhookData || {})
+      dataKeys: Object.keys(webhookData || {}),
+      tx_ref: webhookData.tx_ref,
+      status: webhookData.status
     });
 
-    if (!signature) {
-      console.log('❌ Missing webhook signature');
+    // For testing purposes, allow webhooks without signature in development
+    if (!signature && process.env.NODE_ENV === 'production') {
+      console.log('❌ Missing webhook signature in production');
       return res.status(400).json({ error: 'Missing webhook signature' });
     }
 
+    // Process webhook with or without signature verification
     const transaction = await processWebhook(webhookData, signature);
 
     if (!transaction) {
-      console.log('❌ Transaction not found');
+      console.log('❌ Transaction not found for tx_ref:', webhookData.tx_ref);
       return res.status(404).json({ error: 'Transaction not found' });
     }
 
     console.log('✅ Webhook processed successfully');
     res.json({
       message: 'Webhook processed successfully',
-      status: transaction.status
+      status: transaction.status,
+      tx_ref: webhookData.tx_ref
     });
   } catch (error) {
     console.error('❌ Webhook error:', error);
-    res.status(500).json({ error: 'Webhook processing failed' });
+    res.status(500).json({ 
+      error: 'Webhook processing failed',
+      message: error.message 
+    });
   }
 };
 

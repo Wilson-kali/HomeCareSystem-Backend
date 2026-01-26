@@ -56,11 +56,13 @@ const initiateBookingPayment = async (bookingData, customerDetails, pendingBooki
     };
 
     // Log payment data for debugging
-    console.log('💳 Initiating Paychangu payment:', {
-      amount: paymentData.amount,
-      currency: paymentData.currency,
-      email: paymentData.email,
-      tx_ref: paymentData.tx_ref
+    console.log('💳 Initiating Paychangu payment:');
+    console.log('📤 PAYCHANGU REQUEST BODY:', JSON.stringify(paymentData, null, 2));
+    console.log('📤 PAYCHANGU REQUEST URL:', `${paymentConfig.paychangu.apiUrl}/payment`);
+    console.log('📤 PAYCHANGU REQUEST HEADERS:', {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${paymentConfig.paychangu.secretKey ? '[REDACTED]' : 'NOT_SET'}`
     });
 
     // Call Paychangu API
