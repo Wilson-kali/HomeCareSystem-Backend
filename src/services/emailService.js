@@ -519,7 +519,7 @@ const sendPaymentConfirmation = async (patientEmail, paymentDetails) => {
         </div>
         <div class="content">
           <p>Dear ${paymentDetails.patientName},</p>
-          <p>Your payment has been successfully processed and your appointment is now confirmed!</p>
+          <p>Your payment has been successfully processed and <strong>your booking is now confirmed!</strong></p>
 
           <div class="payment-box">
             <div class="detail-row">
@@ -541,6 +541,10 @@ const sendPaymentConfirmation = async (patientEmail, paymentDetails) => {
             <div class="detail-row">
               <strong>Caregiver:</strong>
               <span>${paymentDetails.caregiverName}</span>
+            </div>
+            <div class="detail-row">
+              <strong>Session Type:</strong>
+              <span>${paymentDetails.jitsiMeetingUrl ? 'Teleconference (Video Call)' : 'In-Person Visit'}</span>
             </div>
           </div>
 
