@@ -301,6 +301,11 @@ const processWebhook = async (webhookData, signature) => {
 
         // Extract fee breakdown from metadata
         const sessionFeeBreakdown = pendingTransaction.metadata?.feeBreakdown || {};
+        
+        // Debug: Log the metadata to see what's stored
+        console.log('🔍 DEBUG - Pending transaction metadata:', JSON.stringify(pendingTransaction.metadata, null, 2));
+        console.log('🔍 DEBUG - Session fee breakdown:', JSON.stringify(sessionFeeBreakdown, null, 2));
+        console.log('🔍 DEBUG - caregiverEarnings from breakdown:', sessionFeeBreakdown.caregiverEarnings);
 
         // Create actual PaymentTransaction record
         const actualTransaction = await PaymentTransaction.create({
@@ -322,6 +327,9 @@ const processWebhook = async (webhookData, signature) => {
           paidAt: pendingTransaction.paidAt,
           metadata: pendingTransaction.metadata
         }, { transaction: t });
+        
+        // Debug: Log the created transaction
+        console.log('🔍 DEBUG - Created actualTransaction caregiverEarnings:', actualTransaction.caregiverEarnings);
 
         // Mark pending transaction as converted
         await pendingTransaction.update({

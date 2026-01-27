@@ -1,13 +1,13 @@
 const express = require('express');
 const { sanitizeUser } = require('../utils/helpers');
-const { Op } = require('sequelize');
+const { Op, sequelize } = require('sequelize');
 
 const router = express.Router();
 
 // Get active caregivers (all verification statuses)
 router.get('/caregivers', async (req, res, next) => {
   try {
-    const { User, Role, Caregiver, Specialty } = require('../models');
+    const { User, Role, Caregiver, Specialty, sequelize } = require('../models');
     const { page = 1, limit = 70, specialtyId, region, district, traditionalAuthority, village, search } = req.query;
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
@@ -113,7 +113,30 @@ router.get('/caregivers', async (req, res, next) => {
     });
 
     // Return in the format the frontend expects - keep nested structure
-    const formattedCaregivers = caregivers.map(user => user.toJSON());
+    const formattedCaregivers = await Promise.all(caregivers.map(async (user) => {
+      const userData = user.toJSON();
+      
+      // Add rating data if caregiver exists
+      if (userData.Caregiver) {
+        const { Appointment } = require('../models');
+        const ratingStats = await Appointment.findAll({
+          where: {
+            caregiverId: userData.Caregiver.id,
+            patient_rating: { [Op.not]: null }
+          },
+          attributes: [
+            [sequelize.fn('AVG', sequelize.col('patient_rating')), 'averageRating'],
+            [sequelize.fn('COUNT', sequelize.col('patient_rating')), 'totalRatings']
+          ],
+          raw: true
+        });
+        
+        userData.Caregiver.averageRating = ratingStats[0]?.averageRating ? parseFloat(ratingStats[0].averageRating).toFixed(1) : null;
+        userData.Caregiver.totalRatings = parseInt(ratingStats[0]?.totalRatings) || 0;
+      }
+      
+      return userData;
+    }));
 
     res.json({
       success: true,

@@ -1,6 +1,6 @@
 const { Caregiver, User, Specialty, TimeSlot, Patient, Appointment } = require('../models');
 const { VERIFICATION_STATUS, TIMESLOT_STATUS } = require('../utils/constants');
-const { Op } = require('sequelize');
+const { Op, sequelize } = require('sequelize');
 
 const getCaregivers = async (req, res, next) => {
   try {
@@ -30,6 +30,23 @@ const getCaregivers = async (req, res, next) => {
     const caregivers = await Caregiver.findAndCountAll({
       where: whereClause,
       include: includeClause,
+      attributes: {
+        include: [
+          // Calculate average rating and total ratings at database level
+          [sequelize.literal(`(
+            SELECT AVG(CAST(patientRating AS DECIMAL(3,2)))
+            FROM appointments 
+            WHERE appointments.caregiverId = Caregiver.id 
+            AND appointments.patientRating IS NOT NULL
+          )`), 'averageRating'],
+          [sequelize.literal(`(
+            SELECT COUNT(*)
+            FROM appointments 
+            WHERE appointments.caregiverId = Caregiver.id 
+            AND appointments.patientRating IS NOT NULL
+          )`), 'totalRatings']
+        ]
+      },
       limit: parseInt(limit),
       offset: parseInt(offset),
       order: [['createdAt', 'DESC']]
@@ -94,7 +111,26 @@ const getCaregiverById = async (req, res, next) => {
       return res.status(404).json({ error: 'Caregiver not found' });
     }
 
-    res.json({ caregiver });
+    // Get rating statistics
+    const ratingStats = await Appointment.findAll({
+      where: {
+        caregiverId: caregiver.id,
+        patientRating: { [Op.not]: null }
+      },
+      attributes: [
+        [sequelize.fn('AVG', sequelize.col('patientRating')), 'averageRating'],
+        [sequelize.fn('COUNT', sequelize.col('patientRating')), 'totalRatings']
+      ],
+      raw: true
+    });
+
+    const caregiverData = {
+      ...caregiver.toJSON(),
+      averageRating: ratingStats[0]?.averageRating ? parseFloat(ratingStats[0].averageRating).toFixed(1) : null,
+      totalRatings: parseInt(ratingStats[0]?.totalRatings) || 0
+    };
+
+    res.json({ caregiver: caregiverData });
   } catch (error) {
     next(error);
   }
