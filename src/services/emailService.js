@@ -1286,6 +1286,150 @@ ${messageContent}
   return sendEmail(caregiverEmail, emailSubject, html);
 };
 
+const sendWithdrawalTokenEmail = async (caregiverEmail, caregiverName, token) => {
+  const systemName = process.env.SYSTEM || 'CareConnect';
+  const subject = `Withdrawal Verification Token - ${systemName}`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 20px auto; background: white; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; background: #f0f8ff; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: #1976d2; }
+        .content { padding: 30px 20px; }
+        .token-box { padding: 30px; border: 2px solid #1976d2; border-radius: 8px; margin: 20px 0; background: #f0f8ff; text-align: center; }
+        .token { font-size: 36px; font-weight: bold; color: #1976d2; letter-spacing: 8px; font-family: monospace; margin: 20px 0; }
+        .warning { background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 4px; margin: 20px 0; }
+        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>Withdrawal Verification</h1>
+        </div>
+        <div class="content">
+          <p>Dear ${caregiverName},</p>
+          <p>You have requested to withdraw funds from your ${systemName} account. Please use the verification token below to complete your withdrawal:</p>
+
+          <div class="token-box">
+            <h3 style="margin: 0 0 20px 0; color: #1976d2;">Your Verification Token</h3>
+            <div class="token">${token}</div>
+            <p style="margin: 20px 0 0 0; font-size: 14px; color: #666;">Enter this 6-digit code in the withdrawal form</p>
+          </div>
+
+          <div class="warning">
+            <strong>Security Notice:</strong>
+            <ul style="margin: 8px 0 0 0; padding-left: 20px;">
+              <li>This token expires in <strong>3 minutes</strong></li>
+              <li>Do not share this token with anyone</li>
+              <li>If you didn't request this withdrawal, ignore this email</li>
+              <li>Contact support immediately if you suspect unauthorized access</li>
+            </ul>
+          </div>
+
+          <p>Complete your withdrawal by entering this token in the withdrawal form within the next 3 minutes.</p>
+        </div>
+        <div class="footer">
+          <p>© ${new Date().getFullYear()} ${systemName}. All rights reserved.</p>
+          <p>This is a security-sensitive email. Keep it confidential.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail(caregiverEmail, subject, html);
+};
+
+const sendWithdrawalSuccessEmail = async (caregiverEmail, withdrawalDetails) => {
+  const systemName = process.env.SYSTEM || 'CareConnect';
+  const subject = `Withdrawal Successful - ${systemName}`;
+  
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 20px auto; background: white; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; background: #e8f5e8; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; color: #2e7d32; }
+        .content { padding: 30px 20px; }
+        .success-box { padding: 20px; border: 2px solid #2e7d32; border-radius: 8px; margin: 20px 0; background: #e8f5e8; }
+        .detail-row { padding: 10px 0; border-bottom: 1px solid #f0f0f0; font-size: 14px; }
+        .detail-row:last-child { border-bottom: none; }
+        .detail-row strong { display: inline-block; min-width: 140px; color: #1a1a1a; font-weight: 600; }
+        .amount { font-size: 20px; font-weight: 600; color: #2e7d32; }
+        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>✅ Withdrawal Successful</h1>
+        </div>
+        <div class="content">
+          <p>Dear ${withdrawalDetails.caregiverName},</p>
+          <p>Your withdrawal request has been successfully processed. The funds have been sent to your specified account.</p>
+
+          <div class="success-box">
+            <h3 style="margin: 0 0 15px 0; color: #2e7d32;">Transaction Summary</h3>
+            <div class="detail-row">
+              <strong>Withdrawal Amount:</strong>
+              <span class="amount">${withdrawalDetails.currency} ${withdrawalDetails.requestedAmount}</span>
+            </div>
+            <div class="detail-row">
+              <strong>Transaction Fee:</strong>
+              <span>${withdrawalDetails.currency} ${withdrawalDetails.withdrawalFee}</span>
+            </div>
+            <div class="detail-row">
+              <strong>Net Amount Received:</strong>
+              <span class="amount">${withdrawalDetails.currency} ${withdrawalDetails.netPayout}</span>
+            </div>
+            <div class="detail-row">
+              <strong>Reference Number:</strong>
+              <span>${withdrawalDetails.paymentReference}</span>
+            </div>
+            <div class="detail-row">
+              <strong>Recipient Account:</strong>
+              <span>${withdrawalDetails.recipientType === 'mobile_money' ? 'Mobile Money' : 'Bank Account'} - ${withdrawalDetails.recipientNumber}</span>
+            </div>
+            <div class="detail-row">
+              <strong>Processing Date:</strong>
+              <span>${new Date().toLocaleDateString()}</span>
+            </div>
+            <div class="detail-row">
+              <strong>Processing Time:</strong>
+              <span>${new Date().toLocaleTimeString()}</span>
+            </div>
+          </div>
+
+          <p><strong>Important Notes:</strong></p>
+          <ul>
+            <li>Keep this email as your withdrawal receipt</li>
+            <li>Funds typically arrive within 1-24 hours depending on your payment provider</li>
+            <li>Contact your payment provider if funds don't arrive within 24 hours</li>
+            <li>Reference number: <strong>${withdrawalDetails.paymentReference}</strong></li>
+          </ul>
+
+          <p>Thank you for using ${systemName}. Your earnings have been successfully transferred.</p>
+        </div>
+        <div class="footer">
+          <p>© ${new Date().getFullYear()} ${systemName}. All rights reserved.</p>
+          <p>Keep this email as your official withdrawal receipt.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail(caregiverEmail, subject, html);
+};
+
 module.exports = {
   sendEmail,
   sendAppointmentConfirmation,
@@ -1304,5 +1448,6 @@ module.exports = {
   sendCancellationNotification,
   sendUserWelcomeEmail,
   sendDataProtectionNotification,
-  sendCustomMessageToCaregiver
+  sendWithdrawalTokenEmail,
+  sendWithdrawalSuccessEmail,
 };

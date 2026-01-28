@@ -23,6 +23,7 @@ const EmailQueue = require('./EmailQueue');
 const Notification = require('./Notification');
 const CaregiverEarnings = require('./CaregiverEarnings');
 const WithdrawalRequest = require('./WithdrawalRequest');
+const WithdrawalToken = require('./WithdrawalToken');
 
 // Define associations
 // User-Role association
@@ -136,6 +137,10 @@ CaregiverEarnings.belongsTo(Caregiver, { foreignKey: 'caregiverId' });
 Caregiver.hasMany(WithdrawalRequest, { foreignKey: 'caregiverId' });
 WithdrawalRequest.belongsTo(Caregiver, { foreignKey: 'caregiverId' });
 
+// WithdrawalToken associations
+Caregiver.hasMany(WithdrawalToken, { foreignKey: 'caregiverId' });
+WithdrawalToken.belongsTo(Caregiver, { foreignKey: 'caregiverId' });
+
 module.exports = {
   sequelize,
   User,
@@ -161,5 +166,6 @@ module.exports = {
   EmailQueue,
   Notification,
   CaregiverEarnings,
-  WithdrawalRequest
+  WithdrawalRequest,
+  WithdrawalToken
 };
