@@ -636,6 +636,11 @@ const processWithdrawal = async (withdrawalData) => {
       // Remove any existing country code or + symbols
       formattedPhone = formattedPhone.replace(/^\+?265/, '').replace(/^0/, '');
       
+      // For Malawian numbers: if 10 digits starting with 9, remove first 9
+      if (formattedPhone.length === 10 && formattedPhone.startsWith('9')) {
+        formattedPhone = formattedPhone.substring(1); // Remove first 9
+      }
+      
       // Ensure exactly 9 digits
       if (formattedPhone.length !== 9) {
         throw new Error(`Invalid phone number format. Expected 9 digits, got ${formattedPhone.length}`);
