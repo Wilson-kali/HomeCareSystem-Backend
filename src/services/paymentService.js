@@ -627,11 +627,23 @@ const processWithdrawal = async (withdrawalData) => {
         throw new Error('Invalid mobile money operator');
       }
       
+      // Fix amount - round up to ensure minimum and make it integer
+      const roundedAmount = Math.max(10, Math.ceil(parseFloat(amount)));
+      
+      // Fix phone number format - add Malawi country code if not present
+      let formattedPhone = recipientNumber;
+      if (!formattedPhone.startsWith('+265') && !formattedPhone.startsWith('265')) {
+        // Remove leading 0 if present and add +265
+        formattedPhone = formattedPhone.startsWith('0') 
+          ? `+265${formattedPhone.substring(1)}` 
+          : `+265${formattedPhone}`;
+      }
+      
       payoutData = {
-        amount: parseFloat(amount),
+        amount: roundedAmount,
         currency: paymentConfig.paychangu.currency,
         operator: operator,
-        phone_number: recipientNumber,
+        phone_number: formattedPhone,
         reference: reference
       };
       endpoint = '/mobile-money/payouts/initialize';
@@ -641,8 +653,11 @@ const processWithdrawal = async (withdrawalData) => {
         throw new Error('Bank code and account name are required for bank transfers');
       }
       
+      // Fix amount for bank transfers too
+      const roundedAmount = Math.max(10, Math.ceil(parseFloat(amount)));
+      
       payoutData = {
-        amount: parseFloat(amount),
+        amount: roundedAmount,
         currency: paymentConfig.paychangu.currency,
         bank_code: bankCode,
         account_number: recipientNumber,
@@ -657,9 +672,11 @@ const processWithdrawal = async (withdrawalData) => {
     logger.info(`💳 Withdrawal API Request:`, {
       endpoint: `${paymentConfig.paychangu.apiUrl}${endpoint}`,
       reference: reference,
-      amount: parseFloat(amount),
+      originalAmount: parseFloat(amount),
+      roundedAmount: payoutData.amount,
       recipientType: recipientType,
-      recipientNumber: recipientNumber.substring(0, 6) + '***', // Mask phone number
+      recipientNumber: recipientNumber.substring(0, 6) + '***',
+      formattedPhone: payoutData.phone_number?.substring(0, 8) + '***' || 'N/A',
       operator: operator || 'N/A',
       bankCode: bankCode || 'N/A'
     });
