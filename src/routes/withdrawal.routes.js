@@ -1,6 +1,6 @@
 const express = require('express');
 const { authenticateToken } = require('../middleware/auth.middleware');
-const { CaregiverEarnings, WithdrawalRequest, WithdrawalToken, Caregiver, User } = require('../models');
+const { CaregiverEarnings, WithdrawalRequest, WithdrawalToken, Caregiver, User, sequelize } = require('../models');
 const { Op } = require('sequelize');
 const logger = require('../utils/logger');
 const { sendWithdrawalTokenEmail, sendWithdrawalSuccessEmail } = require('../services/emailService');
@@ -115,18 +115,30 @@ router.post('/verify-token', async (req, res, next) => {
       return res.status(400).json({ error: 'Invalid or expired token' });
     }
 
-    // Calculate fees for verification
-    const withdrawalFeeRate = 0.01;
-    const minWithdrawalFee = 5;
-    const withdrawalFee = Math.max(parseFloat(amount) * withdrawalFeeRate, minWithdrawalFee);
-    const netPayout = parseFloat(amount) - withdrawalFee;
+    // Calculate fees for verification based on withdrawal type
+    const requestedAmount = parseFloat(amount);
+    let withdrawalFee = 0;
+    
+    // Default to mobile_money if not specified in verification
+    const withdrawalType = 'mobile_money'; // Could be enhanced to accept type in request
+    
+    if (withdrawalType === 'mobile_money') {
+      const mobileMoneyFeeRate = parseFloat(process.env.WITHDRAWAL_MOBILE_MONEY_FEE_RATE) || 0.03;
+      withdrawalFee = requestedAmount * mobileMoneyFeeRate;
+    } else if (withdrawalType === 'bank') {
+      const bankFeeRate = parseFloat(process.env.WITHDRAWAL_BANK_FEE_RATE) || 0.01;
+      const bankFixedFee = parseFloat(process.env.WITHDRAWAL_BANK_FIXED_FEE) || 700;
+      withdrawalFee = (requestedAmount * bankFeeRate) + bankFixedFee;
+    }
+    
+    const netPayout = requestedAmount - withdrawalFee;
 
     logger.info(`Token verified for caregiver ${caregiver.id}, amount: ${amount}`);
 
     res.json({ 
       message: 'Token verified successfully',
       caregiverId: caregiver.id,
-      requestedAmount: parseFloat(amount).toFixed(2),
+      requestedAmount: requestedAmount.toFixed(2),
       withdrawalFee: withdrawalFee.toFixed(2),
       netPayout: netPayout.toFixed(2),
       availableBalance: parseFloat(earnings.walletBalance).toFixed(2)
@@ -256,62 +268,281 @@ router.post('/request', async (req, res, next) => {
       });
     }
 
-    const withdrawalFeeRate = 0.01;
-    const minWithdrawalFee = 5;
-    const withdrawalFee = Math.max(parseFloat(amount) * withdrawalFeeRate, minWithdrawalFee);
-    const netPayout = parseFloat(amount) - withdrawalFee;
-
+    // Calculate platform fee based on withdrawal type and PayChangu rates
+    const requestedAmount = parseFloat(amount);
+    let platformFee = 0;
+    
+    if (recipientType === 'mobile_money') {
+      // Mobile money: 3% fee
+      const mobileMoneyFeeRate = parseFloat(process.env.WITHDRAWAL_MOBILE_MONEY_FEE_RATE) || 0.03;
+      platformFee = requestedAmount * mobileMoneyFeeRate;
+    } else if (recipientType === 'bank') {
+      // Bank: 1% + 700 MWK
+      const bankFeeRate = parseFloat(process.env.WITHDRAWAL_BANK_FEE_RATE) || 0.01;
+      const bankFixedFee = parseFloat(process.env.WITHDRAWAL_BANK_FIXED_FEE) || 700;
+      platformFee = (requestedAmount * bankFeeRate) + bankFixedFee;
+    }
+    
+    const netPayout = requestedAmount - platformFee;
+    
     if (netPayout <= 0) {
       return res.status(400).json({ 
         error: 'Withdrawal amount too small after fees',
-        withdrawalFee: withdrawalFee.toFixed(2)
+        platformFee: platformFee.toFixed(2)
       });
     }
-
+    
     // Generate secure payment reference
     const paymentReference = `WD${Date.now()}${caregiver.id}${crypto.randomInt(1000, 9999)}`;
 
+    // Create withdrawal request with pending status
     const withdrawalRequest = await WithdrawalRequest.create({
       caregiverId: caregiver.id,
-      requestedAmount: parseFloat(amount),
-      withdrawalFee: withdrawalFee,
-      netPayout: netPayout,
+      requestedAmount: requestedAmount,
+      withdrawalFee: platformFee, // Platform fee charged upfront
+      netPayout: netPayout, // Amount sent to PayChangu
       recipientType,
       recipientNumber,
-      status: 'completed',
-      payoutReference: paymentReference,
-      processedAt: new Date()
+      status: 'pending',
+      payoutReference: paymentReference
     });
 
-    await earnings.update({
-      walletBalance: parseFloat(earnings.walletBalance) - parseFloat(amount)
-    });
-
-    await sendWithdrawalSuccessEmail(caregiver.User.email, {
-      caregiverName: `${caregiver.User.firstName} ${caregiver.User.lastName}`,
-      requestedAmount: parseFloat(withdrawalRequest.requestedAmount).toFixed(2),
-      withdrawalFee: parseFloat(withdrawalRequest.withdrawalFee).toFixed(2),
-      netPayout: parseFloat(withdrawalRequest.netPayout).toFixed(2),
-      currency: 'MWK',
-      paymentReference: paymentReference,
+    // Process withdrawal via payment service
+    const paymentService = require('../services/paymentService');
+    
+    // Determine mobile money operator based on phone number
+    let operator = 'airtel'; // default
+    if (recipientNumber.includes('088') || recipientNumber.includes('077')) {
+      operator = 'tnm';
+    }
+    
+    const withdrawalResult = await paymentService.processWithdrawal({
+      amount: netPayout,
       recipientType,
-      recipientNumber
+      recipientNumber,
+      reference: paymentReference,
+      operator,
+      bankCode: req.body.bankCode, // For bank transfers
+      accountName: req.body.accountName // For bank transfers
     });
 
-    logger.info(`Withdrawal completed: ${paymentReference} for caregiver ${caregiver.id}`);
+    // Update withdrawal status based on API response
+    let finalStatus = 'pending';
+    let processedAt = null;
+
+    if (withdrawalResult.status === 'success' && withdrawalResult.data?.status === 'pending') {
+      finalStatus = 'processing';
+      
+      // Deduct full requested amount from wallet (platform keeps the fee)
+      await earnings.update({
+        walletBalance: parseFloat(earnings.walletBalance) - requestedAmount
+      });
+    } else {
+      finalStatus = 'failed';
+    }
+
+    // Update withdrawal request with final status
+    await withdrawalRequest.update({
+      status: finalStatus,
+      processedAt,
+      paychanguResponse: {
+        chargeId: withdrawalResult.data?.charge_id,
+        refId: withdrawalResult.data?.ref_id,
+        transId: withdrawalResult.data?.trans_id,
+        apiResponse: withdrawalResult
+      }
+    });
+
+    // Send appropriate email notification
+    if (finalStatus === 'completed' || finalStatus === 'processing') {
+      await sendWithdrawalSuccessEmail(caregiver.User.email, {
+        caregiverName: `${caregiver.User.firstName} ${caregiver.User.lastName}`,
+        requestedAmount: parseFloat(withdrawalRequest.requestedAmount).toFixed(2),
+        withdrawalFee: parseFloat(withdrawalRequest.withdrawalFee).toFixed(2),
+        netPayout: parseFloat(withdrawalRequest.netPayout).toFixed(2),
+        currency: 'MWK',
+        paymentReference: paymentReference,
+        recipientType,
+        recipientNumber
+      });
+    }
+
+    logger.info(`Withdrawal ${finalStatus}: ${paymentReference} for caregiver ${caregiver.id}`);
 
     res.status(201).json({
-      message: 'Withdrawal processed successfully',
+      message: finalStatus === 'completed' ? 'Withdrawal processed successfully' : 
+               finalStatus === 'processing' ? 'Withdrawal is being processed' : 
+               'Withdrawal failed',
       requestedAmount: parseFloat(withdrawalRequest.requestedAmount).toFixed(2),
-      withdrawalFee: parseFloat(withdrawalRequest.withdrawalFee).toFixed(2),
+      platformFee: platformFee.toFixed(2),
       netPayout: parseFloat(withdrawalRequest.netPayout).toFixed(2),
       currency: 'MWK',
       paymentReference: paymentReference,
       recipientNumber,
-      status: withdrawalRequest.status
+      status: finalStatus,
+      chargeId: withdrawalResult.data?.charge_id
     });
   } catch (error) {
     logger.error('Withdrawal error:', error);
+    
+    // If withdrawal request was created but API failed, mark as failed
+    if (error.withdrawalRequestId) {
+      await WithdrawalRequest.update(
+        { status: 'failed' },
+        { where: { id: error.withdrawalRequestId } }
+      );
+    }
+    
+    next(error);
+  }
+});
+
+// Check withdrawal status
+router.get('/status/:reference', async (req, res, next) => {
+  try {
+    const { reference } = req.params;
+
+    const caregiver = await Caregiver.findOne({ where: { userId: req.user.id } });
+    if (!caregiver) {
+      return res.status(404).json({ error: 'Caregiver profile not found' });
+    }
+
+    const withdrawalRequest = await WithdrawalRequest.findOne({
+      where: {
+        caregiverId: caregiver.id,
+        payoutReference: reference
+      }
+    });
+
+    if (!withdrawalRequest) {
+      return res.status(404).json({ error: 'Withdrawal request not found' });
+    }
+
+    // If status is processing, check with API
+    if (withdrawalRequest.status === 'processing' && withdrawalRequest.paychanguResponse?.refId) {
+      try {
+        const axios = require('axios');
+        const paymentConfig = require('../config/payment');
+        
+        const statusResponse = await axios.get(
+          `${paymentConfig.paychangu.apiUrl}/payouts/mobile-money/${withdrawalRequest.paychanguResponse.refId}`,
+          {
+            headers: {
+              'Accept': 'application/json',
+              'Authorization': `Bearer ${paymentConfig.paychangu.secretKey}`
+            }
+          }
+        );
+        
+        // Update status if changed
+        const apiData = statusResponse.data.data;
+        if (apiData && apiData.status !== withdrawalRequest.status) {
+          let newStatus = apiData.status;
+          let processedAt = withdrawalRequest.processedAt;
+          
+          if (newStatus === 'completed' || newStatus === 'success') {
+            newStatus = 'completed';
+            processedAt = new Date();
+          } else if (newStatus === 'failed') {
+            newStatus = 'failed';
+          }
+          
+          await withdrawalRequest.update({
+            status: newStatus,
+            processedAt
+          });
+        }
+      } catch (error) {
+        logger.error('Failed to check withdrawal status:', error);
+      }
+    }
+
+    res.json({
+      reference: withdrawalRequest.payoutReference,
+      status: withdrawalRequest.status,
+      requestedAmount: parseFloat(withdrawalRequest.requestedAmount).toFixed(2),
+      netPayout: parseFloat(withdrawalRequest.netPayout).toFixed(2),
+      recipientNumber: withdrawalRequest.recipientNumber,
+      requestedAt: withdrawalRequest.createdAt,
+      processedAt: withdrawalRequest.processedAt
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Withdrawal webhook for status updates
+router.post('/webhook', async (req, res, next) => {
+  try {
+    const { event_type, charge_id, reference, amount, charge, status } = req.body;
+
+    if (!charge_id && !reference) {
+      return res.status(400).json({ error: 'charge_id or reference is required' });
+    }
+
+    // Find withdrawal request by reference or charge_id
+    const withdrawalRequest = await WithdrawalRequest.findOne({
+      where: {
+        [Op.or]: [
+          { payoutReference: reference },
+          sequelize.where(
+            sequelize.json('paychangu_response.chargeId'),
+            charge_id
+          )
+        ]
+      }
+    });
+
+    if (!withdrawalRequest) {
+      logger.warn(`Withdrawal webhook: request not found for charge_id ${charge_id} or reference ${reference}`);
+      return res.status(404).json({ error: 'Withdrawal request not found' });
+    }
+
+    // Update status based on webhook (no fee changes since platform fee already charged)
+    let newStatus = status;
+    let processedAt = withdrawalRequest.processedAt;
+    let shouldUpdateBalance = false;
+
+    if (status === 'completed' || status === 'success') {
+      newStatus = 'completed';
+      processedAt = new Date();
+    } else if (status === 'failed') {
+      newStatus = 'failed';
+      // If withdrawal failed and balance was already deducted, refund it
+      if (withdrawalRequest.status === 'processing') {
+        shouldUpdateBalance = true;
+      }
+    }
+
+    await withdrawalRequest.update({
+      status: newStatus,
+      processedAt,
+      paychanguResponse: {
+        ...withdrawalRequest.paychanguResponse,
+        chargeId: charge_id,
+        webhookReceived: new Date(),
+        webhookPayload: req.body
+      }
+    });
+
+    // Refund balance if withdrawal failed
+    if (shouldUpdateBalance) {
+      const earnings = await CaregiverEarnings.findOne({
+        where: { caregiverId: withdrawalRequest.caregiverId }
+      });
+      
+      if (earnings) {
+        await earnings.update({
+          walletBalance: parseFloat(earnings.walletBalance) + parseFloat(withdrawalRequest.requestedAmount)
+        });
+        logger.info(`Refunded ${withdrawalRequest.requestedAmount} MWK to caregiver ${withdrawalRequest.caregiverId}`);
+      }
+    }
+
+    logger.info(`Withdrawal webhook processed: ${charge_id || reference} -> ${newStatus}, fee: ${paychanguFee}`);
+    res.json({ message: 'Webhook processed successfully' });
+  } catch (error) {
+    logger.error('Withdrawal webhook error:', error);
     next(error);
   }
 });

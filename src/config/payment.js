@@ -11,6 +11,12 @@ module.exports = {
     environment: process.env.NODE_ENV || 'development',
     convenienceFeePercentage: parseFloat(process.env.PAYMENT_CONVENIENCE_FEE_PERCENTAGE) || 2,
     taxRate: parseFloat(process.env.PAYMENT_TAX_RATE) || 16.5, // Malawi VAT rate
-    platformCommissionRate: parseFloat(process.env.PLATFORM_COMMISSION_RATE) || 20 // Platform commission percentage
+    platformCommissionRate: parseFloat(process.env.PLATFORM_COMMISSION_RATE) || 20, // Platform commission percentage
+    // Withdrawal fees
+    withdrawalFees: {
+      mobileMoneyRate: parseFloat(process.env.WITHDRAWAL_MOBILE_MONEY_FEE_RATE) || 0.03, // 3%
+      bankRate: parseFloat(process.env.WITHDRAWAL_BANK_FEE_RATE) || 0.01, // 1%
+      bankFixedFee: parseFloat(process.env.WITHDRAWAL_BANK_FIXED_FEE) || 700 // 700 MWK
+    }
   }
 };

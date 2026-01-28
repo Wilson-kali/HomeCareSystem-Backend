@@ -604,6 +604,85 @@ const getAppointmentPayments = async (appointmentId) => {
 };
 
 
+/**
+ * Process Withdrawal via PayChangu
+ */
+const processWithdrawal = async (withdrawalData) => {
+  try {
+    const { amount, recipientType, recipientNumber, reference, operator, bankCode, accountName } = withdrawalData;
+
+    // Input validation
+    if (!amount || amount <= 0) {
+      throw new Error('Invalid amount');
+    }
+    if (!recipientNumber || recipientNumber.length < 8) {
+      throw new Error('Invalid recipient number');
+    }
+
+    let payoutData, endpoint;
+
+    if (recipientType === 'mobile_money') {
+      // Validate operator
+      if (!['airtel', 'tnm'].includes(operator)) {
+        throw new Error('Invalid mobile money operator');
+      }
+      
+      payoutData = {
+        amount: parseFloat(amount),
+        currency: paymentConfig.paychangu.currency,
+        operator: operator,
+        phone_number: recipientNumber,
+        reference: reference
+      };
+      endpoint = '/mobile-money/payouts/initialize';
+    } else if (recipientType === 'bank') {
+      // Validate required bank fields
+      if (!bankCode || !accountName) {
+        throw new Error('Bank code and account name are required for bank transfers');
+      }
+      
+      payoutData = {
+        amount: parseFloat(amount),
+        currency: paymentConfig.paychangu.currency,
+        bank_code: bankCode,
+        account_number: recipientNumber,
+        account_name: accountName,
+        reference: reference
+      };
+      endpoint = '/bank/payouts/initialize';
+    } else {
+      throw new Error('Invalid recipient type');
+    }
+
+    const response = await axios.post(
+      `${paymentConfig.paychangu.apiUrl}${endpoint}`,
+      payoutData,
+      {
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${paymentConfig.paychangu.secretKey}`
+        }
+      }
+    );
+
+    // Log only essential info to avoid sensitive data
+    logger.info(`Withdrawal initiated: ${reference}`, {
+      status: response.data.status,
+      payoutId: response.data.data?.charge_id || response.data.data?.ref_id
+    });
+    
+    return response.data;
+  } catch (error) {
+    logger.error('Withdrawal processing failed:', {
+      reference: withdrawalData.reference,
+      error: error.message,
+      status: error.response?.status
+    });
+    throw error;
+  }
+};
+
 module.exports = {
   initiateBookingPayment,
   verifyPayment,
@@ -611,6 +690,7 @@ module.exports = {
   verifyWebhookSignature,
   getPaymentByTxRef,
   getAppointmentPayments,
-  updateCaregiverEarnings
+  updateCaregiverEarnings,
+  processWithdrawal
 };
 
