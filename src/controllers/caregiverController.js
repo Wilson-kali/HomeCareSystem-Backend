@@ -51,11 +51,11 @@ const getCaregivers = async (req, res, next) => {
           const ratingStats = await Appointment.findAll({
             where: {
               caregiverId: caregiver.id,
-              patientRating: { [Op.not]: null }
+              patient_rating: { [Op.not]: null }
             },
             attributes: [
-              [sequelize.fn('AVG', sequelize.col('patientRating')), 'averageRating'],
-              [sequelize.fn('COUNT', sequelize.col('patientRating')), 'totalRatings']
+              [sequelize.fn('AVG', sequelize.col('patient_rating')), 'averageRating'],
+              [sequelize.fn('COUNT', sequelize.col('patient_rating')), 'totalRatings']
             ],
             raw: true
           });
@@ -84,11 +84,11 @@ const getCaregivers = async (req, res, next) => {
         const ratingStats = await Appointment.findAll({
           where: {
             caregiverId: caregiver.id,
-            patientRating: { [Op.not]: null }
+            patient_rating: { [Op.not]: null }
           },
           attributes: [
-            [sequelize.fn('AVG', sequelize.col('patientRating')), 'averageRating'],
-            [sequelize.fn('COUNT', sequelize.col('patientRating')), 'totalRatings']
+            [sequelize.fn('AVG', sequelize.col('patient_rating')), 'averageRating'],
+            [sequelize.fn('COUNT', sequelize.col('patient_rating')), 'totalRatings']
           ],
           raw: true
         });
@@ -136,11 +136,11 @@ const getCaregiverById = async (req, res, next) => {
     const ratingStats = await Appointment.findAll({
       where: {
         caregiverId: caregiver.id,
-        patientRating: { [Op.not]: null }
+        patient_rating: { [Op.not]: null }
       },
       attributes: [
-        [sequelize.fn('AVG', sequelize.col('patientRating')), 'averageRating'],
-        [sequelize.fn('COUNT', sequelize.col('patientRating')), 'totalRatings']
+        [sequelize.fn('AVG', sequelize.col('patient_rating')), 'averageRating'],
+        [sequelize.fn('COUNT', sequelize.col('patient_rating')), 'totalRatings']
       ],
       raw: true
     });
