@@ -382,6 +382,7 @@ router.post('/request', async (req, res, next) => {
     });
     console.log('✅ Withdrawal request created:', withdrawalRequest.id);
 
+    console.log('🔧 Loading payment service...');
     // Process withdrawal via payment service
     const paymentService = require('../services/paymentService');
     
@@ -391,6 +392,7 @@ router.post('/request', async (req, res, next) => {
       operator = 'tnm';
     }
     
+    console.log('📱 Operator detected:', operator);
     logger.info(`📱 Operator Detection:`, {
       caregiverId: caregiver.id,
       recipientNumber: recipientNumber.substring(0, 6) + '***',
@@ -398,7 +400,8 @@ router.post('/request', async (req, res, next) => {
       paymentReference: paymentReference
     });
     
-    const withdrawalResult = await paymentService.processWithdrawal({
+    console.log('🚀 Calling payment service...');
+    const withdrawalParams = {
       amount: netPayout,
       recipientType,
       recipientNumber,
@@ -406,7 +409,11 @@ router.post('/request', async (req, res, next) => {
       operator,
       bankCode: req.body.bankCode, // For bank transfers
       accountName: req.body.accountName // For bank transfers
-    });
+    };
+    console.log('📋 Payment params:', withdrawalParams);
+    
+    const withdrawalResult = await paymentService.processWithdrawal(withdrawalParams);
+    console.log('✅ Payment service response received:', withdrawalResult);
 
     // Update withdrawal status based on API response
     let finalStatus = 'pending';
