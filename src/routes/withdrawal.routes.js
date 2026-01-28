@@ -417,25 +417,22 @@ router.post('/request', async (req, res, next) => {
       withdrawalResult = await paymentService.processWithdrawal(withdrawalParams);
       console.log('✅ Payment service response received:', withdrawalResult);
     } catch (paymentError) {
+      console.log('❌ FULL PAYMENT ERROR JSON:', JSON.stringify(paymentError, null, 2));
       console.log('❌ Payment service error:', paymentError.message);
-      console.log('❌ Payment error details:', {
-        name: paymentError.name,
-        message: paymentError.message,
-        stack: paymentError.stack?.split('\n')[0]
-      });
       
       // Mark withdrawal as failed and return error
       await withdrawalRequest.update({
         status: 'failed',
         paychanguResponse: {
           error: paymentError.message,
-          errorDetails: paymentError.stack
+          errorDetails: paymentError.stack,
+          apiResponse: paymentError.response?.data
         }
       });
       
       return res.status(400).json({ 
         error: 'Withdrawal processing failed',
-        details: paymentError.message
+        details: paymentError.response?.data?.message || paymentError.message
       });
     }
 
