@@ -215,18 +215,36 @@ router.get('/history', async (req, res, next) => {
 // Request withdrawal
 router.post('/request', async (req, res, next) => {
   try {
+    logger.info(`🚀 Withdrawal Request Received:`, {
+      body: req.body,
+      userId: req.user?.id,
+      timestamp: new Date().toISOString()
+    });
+
     const { amount, recipientType = 'mobile_money', recipientNumber, token } = req.body;
 
     // Enhanced validation
     if (!amount || amount <= 0 || amount > 1000000) {
+      logger.error(`❌ Validation Error - Invalid Amount:`, {
+        amount: amount,
+        userId: req.user?.id
+      });
       return res.status(400).json({ error: 'Invalid withdrawal amount (1-1,000,000 MWK)' });
     }
 
     if (!recipientNumber || !/^[0-9+\-\s]{8,15}$/.test(recipientNumber)) {
+      logger.error(`❌ Validation Error - Invalid Recipient Number:`, {
+        recipientNumber: recipientNumber,
+        userId: req.user?.id
+      });
       return res.status(400).json({ error: 'Invalid recipient number format' });
     }
 
     if (!token || !/^\d{6}$/.test(token)) {
+      logger.error(`❌ Validation Error - Invalid Token:`, {
+        token: token,
+        userId: req.user?.id
+      });
       return res.status(400).json({ error: 'Invalid withdrawal token format' });
     }
 
@@ -434,7 +452,12 @@ router.post('/request', async (req, res, next) => {
       chargeId: withdrawalResult.data?.charge_id
     });
   } catch (error) {
-    logger.error('Withdrawal error:', error);
+    logger.error(`❌ Withdrawal Request Error:`, {
+      error: error.message,
+      stack: error.stack,
+      userId: req.user?.id,
+      body: req.body
+    });
     
     // If withdrawal request was created but API failed, mark as failed
     if (error.withdrawalRequestId) {
