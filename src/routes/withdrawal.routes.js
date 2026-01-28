@@ -215,16 +215,33 @@ router.get('/history', async (req, res, next) => {
 // Request withdrawal
 router.post('/request', async (req, res, next) => {
   try {
+    // Log the raw request body first
+    console.log('=== RAW REQUEST BODY ===');
+    console.log('req.body:', req.body);
+    console.log('req.body type:', typeof req.body);
+    console.log('req.body keys:', Object.keys(req.body || {}));
+    console.log('========================');
+    
     logger.info(`🚀 Withdrawal Request Received:`, {
       body: req.body,
+      bodyType: typeof req.body,
+      bodyKeys: Object.keys(req.body || {}),
       userId: req.user?.id,
       timestamp: new Date().toISOString()
     });
 
     const { amount, recipientType = 'mobile_money', recipientNumber, token } = req.body;
 
+    console.log('=== EXTRACTED VALUES ===');
+    console.log('amount:', amount, 'type:', typeof amount);
+    console.log('recipientType:', recipientType);
+    console.log('recipientNumber:', recipientNumber);
+    console.log('token:', token);
+    console.log('========================');
+
     // Enhanced validation
     if (!amount || amount <= 0 || amount > 1000000) {
+      console.log('VALIDATION FAILED: Invalid amount');
       logger.error(`❌ Validation Error - Invalid Amount:`, {
         amount: amount,
         userId: req.user?.id
@@ -233,6 +250,7 @@ router.post('/request', async (req, res, next) => {
     }
 
     if (!recipientNumber || !/^[0-9+\-\s]{8,15}$/.test(recipientNumber)) {
+      console.log('VALIDATION FAILED: Invalid recipient number');
       logger.error(`❌ Validation Error - Invalid Recipient Number:`, {
         recipientNumber: recipientNumber,
         userId: req.user?.id
@@ -241,12 +259,16 @@ router.post('/request', async (req, res, next) => {
     }
 
     if (!token || !/^\d{6}$/.test(token)) {
+      console.log('VALIDATION FAILED: Invalid token');
       logger.error(`❌ Validation Error - Invalid Token:`, {
         token: token,
         userId: req.user?.id
       });
       return res.status(400).json({ error: 'Invalid withdrawal token format' });
     }
+
+    console.log('ALL VALIDATIONS PASSED');
+    logger.info('✅ All validations passed, proceeding with withdrawal');
 
     const caregiver = await Caregiver.findOne({ 
       where: { userId: req.user.id },
@@ -613,7 +635,7 @@ router.post('/webhook', async (req, res, next) => {
       }
     }
 
-    logger.info(`Withdrawal webhook processed: ${charge_id || reference} -> ${newStatus}, fee: ${paychanguFee}`);
+    logger.info(`Withdrawal webhook processed: ${charge_id || reference} -> ${newStatus}`);
     res.json({ message: 'Webhook processed successfully' });
   } catch (error) {
     logger.error('Withdrawal webhook error:', error);
