@@ -21,6 +21,8 @@ const PendingBooking = require('./PendingBooking');
 const PendingPaymentTransaction = require('./PendingPaymentTransaction');
 const EmailQueue = require('./EmailQueue');
 const Notification = require('./Notification');
+const CaregiverEarnings = require('./CaregiverEarnings');
+const WithdrawalRequest = require('./WithdrawalRequest');
 
 // Define associations
 // User-Role association
@@ -126,6 +128,14 @@ PendingPaymentTransaction.belongsTo(PaymentTransaction, { foreignKey: 'converted
 User.hasMany(Notification, { foreignKey: 'userId' });
 Notification.belongsTo(User, { foreignKey: 'userId' });
 
+// CaregiverEarnings associations
+Caregiver.hasOne(CaregiverEarnings, { foreignKey: 'caregiverId' });
+CaregiverEarnings.belongsTo(Caregiver, { foreignKey: 'caregiverId' });
+
+// WithdrawalRequest associations
+Caregiver.hasMany(WithdrawalRequest, { foreignKey: 'caregiverId' });
+WithdrawalRequest.belongsTo(Caregiver, { foreignKey: 'caregiverId' });
+
 module.exports = {
   sequelize,
   User,
@@ -149,5 +159,7 @@ module.exports = {
   PendingBooking,
   PendingPaymentTransaction,
   EmailQueue,
-  Notification
+  Notification,
+  CaregiverEarnings,
+  WithdrawalRequest
 };

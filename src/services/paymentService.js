@@ -1,6 +1,6 @@
 const axios = require('axios');
 const crypto = require('crypto');
-const { PaymentTransaction, PendingPaymentTransaction, Appointment, Caregiver, User, TimeSlot, PendingBooking, sequelize } = require('../models');
+const { PaymentTransaction, PendingPaymentTransaction, Appointment, Caregiver, User, TimeSlot, PendingBooking, CaregiverEarnings, sequelize } = require('../models');
 const { PAYMENT_STATUS } = require('../utils/constants');
 const paymentConfig = require('../config/payment');
 const logger = require('../utils/logger');
@@ -267,6 +267,11 @@ const processWebhook = async (webhookData, signature) => {
           convertedToPaymentId: actualTransaction.id
         }, { transaction: t });
 
+        // Update caregiver earnings if caregiverEarnings exists (for booking fees that have earnings)
+        if (actualTransaction.caregiverEarnings && actualTransaction.caregiverEarnings > 0) {
+          await updateCaregiverEarnings(appointment.caregiverId, actualTransaction.caregiverEarnings, t);
+        }
+
         logger.info(`Pending payment ${pendingTransaction.id} converted to payment ${actualTransaction.id}`);
       } else if (pendingTransaction.appointmentId) {
         // Handle session fee payment for existing appointment
@@ -350,6 +355,11 @@ const processWebhook = async (webhookData, signature) => {
         await pendingTransaction.update({
           convertedToPaymentId: actualTransaction.id
         }, { transaction: t });
+
+        // Update caregiver earnings if caregiverEarnings exists
+        if (actualTransaction.caregiverEarnings && actualTransaction.caregiverEarnings > 0) {
+          await updateCaregiverEarnings(appointment.caregiverId, actualTransaction.caregiverEarnings, t);
+        }
 
         logger.info(`Session fee payment ${actualTransaction.id} completed for appointment ${appointment.id}`);
         
@@ -515,6 +525,37 @@ const processWebhook = async (webhookData, signature) => {
 };
 
 /**
+ * Update Caregiver Earnings
+ * Add earnings to caregiver's total and wallet balance
+ */
+const updateCaregiverEarnings = async (caregiverId, earnedAmount, transaction = null) => {
+  try {
+    // Find or create caregiver earnings record
+    const [earnings] = await CaregiverEarnings.findOrCreate({
+      where: { caregiverId: caregiverId },
+      defaults: {
+        caregiverId: caregiverId,
+        totalCaregiverEarnings: 0,
+        walletBalance: 0
+      },
+      transaction
+    });
+
+    // Update earnings - add to both total and wallet balance
+    await earnings.update({
+      totalCaregiverEarnings: parseFloat(earnings.totalCaregiverEarnings) + parseFloat(earnedAmount),
+      walletBalance: parseFloat(earnings.walletBalance) + parseFloat(earnedAmount)
+    }, { transaction });
+
+    logger.info(`Updated caregiver ${caregiverId} earnings: +${earnedAmount} MWK`);
+    return earnings;
+  } catch (error) {
+    logger.error('Failed to update caregiver earnings:', error);
+    throw error;
+  }
+};
+
+/**
  * Verify Webhook Signature
  * Ensures webhook is from Paychangu
  */
@@ -569,5 +610,7 @@ module.exports = {
   processWebhook,
   verifyWebhookSignature,
   getPaymentByTxRef,
-  getAppointmentPayments
+  getAppointmentPayments,
+  updateCaregiverEarnings
 };
+
