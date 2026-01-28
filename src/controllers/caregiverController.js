@@ -1,6 +1,6 @@
-const { Caregiver, User, Specialty, TimeSlot, Patient, Appointment } = require('../models');
+const { Caregiver, User, Specialty, TimeSlot, Patient, Appointment, sequelize } = require('../models');
 const { VERIFICATION_STATUS, TIMESLOT_STATUS } = require('../utils/constants');
-const { Op, sequelize } = require('sequelize');
+const { Op } = require('sequelize');
 
 const getCaregivers = async (req, res, next) => {
   try {
@@ -30,23 +30,6 @@ const getCaregivers = async (req, res, next) => {
     const caregivers = await Caregiver.findAndCountAll({
       where: whereClause,
       include: includeClause,
-      attributes: {
-        include: [
-          // Calculate average rating and total ratings at database level
-          [sequelize.literal(`(
-            SELECT AVG(CAST(patientRating AS DECIMAL(3,2)))
-            FROM appointments 
-            WHERE appointments.caregiverId = Caregiver.id 
-            AND appointments.patientRating IS NOT NULL
-          )`), 'averageRating'],
-          [sequelize.literal(`(
-            SELECT COUNT(*)
-            FROM appointments 
-            WHERE appointments.caregiverId = Caregiver.id 
-            AND appointments.patientRating IS NOT NULL
-          )`), 'totalRatings']
-        ]
-      },
       limit: parseInt(limit),
       offset: parseInt(offset),
       order: [['createdAt', 'DESC']]
@@ -64,10 +47,25 @@ const getCaregivers = async (req, res, next) => {
             }
           });
           
+          // Get rating statistics
+          const ratingStats = await Appointment.findAll({
+            where: {
+              caregiverId: caregiver.id,
+              patientRating: { [Op.not]: null }
+            },
+            attributes: [
+              [sequelize.fn('AVG', sequelize.col('patientRating')), 'averageRating'],
+              [sequelize.fn('COUNT', sequelize.col('patientRating')), 'totalRatings']
+            ],
+            raw: true
+          });
+          
           return {
             ...caregiver.toJSON(),
             hasAvailableSlots: availableSlots > 0,
-            availableSlotsCount: availableSlots
+            availableSlotsCount: availableSlots,
+            averageRating: ratingStats[0]?.averageRating ? parseFloat(ratingStats[0].averageRating).toFixed(1) : null,
+            totalRatings: parseInt(ratingStats[0]?.totalRatings) || 0
           };
         })
       );
@@ -80,8 +78,31 @@ const getCaregivers = async (req, res, next) => {
       });
     }
 
+    // Add rating statistics for regular response
+    const caregiversWithRatings = await Promise.all(
+      caregivers.rows.map(async (caregiver) => {
+        const ratingStats = await Appointment.findAll({
+          where: {
+            caregiverId: caregiver.id,
+            patientRating: { [Op.not]: null }
+          },
+          attributes: [
+            [sequelize.fn('AVG', sequelize.col('patientRating')), 'averageRating'],
+            [sequelize.fn('COUNT', sequelize.col('patientRating')), 'totalRatings']
+          ],
+          raw: true
+        });
+        
+        return {
+          ...caregiver.toJSON(),
+          averageRating: ratingStats[0]?.averageRating ? parseFloat(ratingStats[0].averageRating).toFixed(1) : null,
+          totalRatings: parseInt(ratingStats[0]?.totalRatings) || 0
+        };
+      })
+    );
+
     res.json({
-      caregivers: caregivers.rows,
+      caregivers: caregiversWithRatings,
       total: caregivers.count,
       page: parseInt(page),
       totalPages: Math.ceil(caregivers.count / limit)

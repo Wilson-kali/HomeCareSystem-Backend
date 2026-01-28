@@ -300,11 +300,15 @@ const processWebhook = async (webhookData, signature) => {
         );
 
         // Extract fee breakdown from metadata
-        // Parse metadata if it's a string
+        // Parse metadata if it's a string (handle double-encoded JSON)
         let metadata = pendingTransaction.metadata;
         if (typeof metadata === 'string') {
           try {
             metadata = JSON.parse(metadata);
+            // Handle double-encoded JSON
+            if (typeof metadata === 'string') {
+              metadata = JSON.parse(metadata);
+            }
           } catch (e) {
             console.error('Failed to parse metadata JSON:', e);
             metadata = {};
