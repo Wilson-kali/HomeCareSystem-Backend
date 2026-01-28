@@ -627,44 +627,52 @@ const processWithdrawal = async (withdrawalData) => {
         throw new Error('Invalid mobile money operator');
       }
       
-      // Fix amount - round up to ensure minimum and make it integer
+      // Round amount to integer (minimum 10 MWK)
       const roundedAmount = Math.max(10, Math.ceil(parseFloat(amount)));
       
-      // Fix phone number format - add Malawi country code if not present
+      // Format phone number with +265 country code
       let formattedPhone = recipientNumber;
       if (!formattedPhone.startsWith('+265') && !formattedPhone.startsWith('265')) {
-        // Remove leading 0 if present and add +265
         formattedPhone = formattedPhone.startsWith('0') 
           ? `+265${formattedPhone.substring(1)}` 
           : `+265${formattedPhone}`;
       }
       
+      // Map operator to PayChangu operator ref_id
+      const operatorRefIds = {
+        'airtel': '20be6c20-adeb-4b5b-a7ba-0769820df4fb',
+        'tnm': '27494cb5-ba9e-437f-a114-4e7a7686bcca'
+      };
+      
+      // Use correct PayChangu mobile money payout structure
       payoutData = {
+        mobile_money_operator_ref_id: operatorRefIds[operator],
+        mobile: formattedPhone,
         amount: roundedAmount,
-        currency: paymentConfig.paychangu.currency,
-        operator: operator,
-        phone_number: formattedPhone,
-        reference: reference
+        charge_id: reference
       };
       endpoint = '/mobile-money/payouts/initialize';
+      
     } else if (recipientType === 'bank') {
       // Validate required bank fields
       if (!bankCode || !accountName) {
         throw new Error('Bank code and account name are required for bank transfers');
       }
       
-      // Fix amount for bank transfers too
+      // Round amount to integer (minimum 10 MWK)
       const roundedAmount = Math.max(10, Math.ceil(parseFloat(amount)));
       
+      // Use correct PayChangu bank payout structure
       payoutData = {
-        amount: roundedAmount,
-        currency: paymentConfig.paychangu.currency,
-        bank_code: bankCode,
-        account_number: recipientNumber,
+        payout_method: 'bank_transfer',
+        bank_uuid: bankCode, // bankCode should be the bank UUID from PayChangu
         account_name: accountName,
-        reference: reference
+        account_number: recipientNumber,
+        amount: roundedAmount,
+        charge_id: reference
       };
-      endpoint = '/bank/payouts/initialize';
+      endpoint = '/direct-charge/payouts/initialize';
+      
     } else {
       throw new Error('Invalid recipient type');
     }
@@ -676,9 +684,10 @@ const processWithdrawal = async (withdrawalData) => {
       roundedAmount: payoutData.amount,
       recipientType: recipientType,
       recipientNumber: recipientNumber.substring(0, 6) + '***',
-      formattedPhone: payoutData.phone_number?.substring(0, 8) + '***' || 'N/A',
+      formattedPhone: payoutData.mobile?.substring(0, 8) + '***' || 'N/A',
       operator: operator || 'N/A',
-      bankCode: bankCode || 'N/A'
+      operatorRefId: payoutData.mobile_money_operator_ref_id || 'N/A',
+      bankUuid: payoutData.bank_uuid || 'N/A'
     });
 
     const response = await axios.post(
