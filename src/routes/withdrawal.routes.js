@@ -319,11 +319,13 @@ router.post('/request', async (req, res, next) => {
     }
     console.log('✅ Balance check passed:', earnings.walletBalance);
 
+    console.log('💰 Calculating fees...');
     // Calculate platform fee based on withdrawal type and PayChangu rates
     const requestedAmount = parseFloat(amount);
     
     // Generate secure payment reference
     const paymentReference = `WD${Date.now()}${caregiver.id}${crypto.randomInt(1000, 9999)}`;
+    console.log('📝 Payment reference generated:', paymentReference);
 
     logger.info(`💰 Withdrawal Request Started:`, {
       caregiverId: caregiver.id,
@@ -347,6 +349,7 @@ router.post('/request', async (req, res, next) => {
     }
     
     const netPayout = requestedAmount - platformFee;
+    console.log('💵 Fee calculation complete:', { requestedAmount, platformFee, netPayout });
     
     logger.info(`💵 Fee Calculation:`, {
       caregiverId: caregiver.id,
@@ -357,12 +360,15 @@ router.post('/request', async (req, res, next) => {
     });
     
     if (netPayout <= 0) {
+      console.log('❌ Net payout too small');
       return res.status(400).json({ 
         error: 'Withdrawal amount too small after fees',
         platformFee: platformFee.toFixed(2)
       });
     }
+    console.log('✅ Net payout validation passed');
 
+    console.log('📝 Creating withdrawal request...');
     // Create withdrawal request with pending status
     const withdrawalRequest = await WithdrawalRequest.create({
       caregiverId: caregiver.id,
@@ -374,6 +380,7 @@ router.post('/request', async (req, res, next) => {
       status: 'pending',
       payoutReference: paymentReference
     });
+    console.log('✅ Withdrawal request created:', withdrawalRequest.id);
 
     // Process withdrawal via payment service
     const paymentService = require('../services/paymentService');
