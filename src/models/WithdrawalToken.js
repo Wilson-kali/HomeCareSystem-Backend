@@ -34,7 +34,8 @@ const WithdrawalToken = sequelize.define('WithdrawalToken', {
   tableName: 'withdrawal_tokens',
   timestamps: true,
   createdAt: 'created_at',
-  updatedAt: 'updated_at'
+  updatedAt: 'updated_at',
+  underscored: true
 });
 
 module.exports = WithdrawalToken;

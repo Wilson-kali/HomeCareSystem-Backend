@@ -26,7 +26,7 @@ router.post('/request-token', async (req, res, next) => {
     const recentTokens = await WithdrawalToken.count({
       where: {
         caregiverId: caregiver.id,
-        createdAt: { [Op.gte]: new Date(Date.now() - 5 * 60 * 1000) } // 5 minutes
+        created_at: { [Op.gte]: new Date(Date.now() - 5 * 60 * 1000) } // 5 minutes
       }
     });
 
