@@ -654,6 +654,16 @@ const processWithdrawal = async (withdrawalData) => {
       throw new Error('Invalid recipient type');
     }
 
+    logger.info(`💳 Withdrawal API Request:`, {
+      endpoint: `${paymentConfig.paychangu.apiUrl}${endpoint}`,
+      reference: reference,
+      amount: parseFloat(amount),
+      recipientType: recipientType,
+      recipientNumber: recipientNumber.substring(0, 6) + '***', // Mask phone number
+      operator: operator || 'N/A',
+      bankCode: bankCode || 'N/A'
+    });
+
     const response = await axios.post(
       `${paymentConfig.paychangu.apiUrl}${endpoint}`,
       payoutData,
@@ -666,18 +676,23 @@ const processWithdrawal = async (withdrawalData) => {
       }
     );
 
-    // Log only essential info to avoid sensitive data
-    logger.info(`Withdrawal initiated: ${reference}`, {
+    logger.info(`✅ Withdrawal API Response:`, {
+      reference: reference,
       status: response.data.status,
-      payoutId: response.data.data?.charge_id || response.data.data?.ref_id
+      payoutId: response.data.data?.charge_id || response.data.data?.ref_id,
+      message: response.data.message
     });
     
     return response.data;
   } catch (error) {
-    logger.error('Withdrawal processing failed:', {
+    logger.error(`❌ Withdrawal API Error:`, {
       reference: withdrawalData.reference,
       error: error.message,
-      status: error.response?.status
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      responseData: error.response?.data,
+      endpoint: `${paymentConfig.paychangu.apiUrl}${endpoint || 'unknown'}`,
+      amount: withdrawalData.amount
     });
     throw error;
   }

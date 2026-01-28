@@ -268,6 +268,14 @@ router.post('/request', async (req, res, next) => {
       });
     }
 
+    logger.info(`💰 Withdrawal Request Started:`, {
+      caregiverId: caregiver.id,
+      requestedAmount: requestedAmount,
+      recipientType: recipientType,
+      recipientNumber: recipientNumber.substring(0, 6) + '***',
+      paymentReference: paymentReference
+    });
+
     // Calculate platform fee based on withdrawal type and PayChangu rates
     const requestedAmount = parseFloat(amount);
     let platformFee = 0;
@@ -284,6 +292,14 @@ router.post('/request', async (req, res, next) => {
     }
     
     const netPayout = requestedAmount - platformFee;
+    
+    logger.info(`💵 Fee Calculation:`, {
+      caregiverId: caregiver.id,
+      requestedAmount: requestedAmount,
+      platformFee: platformFee,
+      netPayout: netPayout,
+      recipientType: recipientType
+    });
     
     if (netPayout <= 0) {
       return res.status(400).json({ 
@@ -316,6 +332,13 @@ router.post('/request', async (req, res, next) => {
       operator = 'tnm';
     }
     
+    logger.info(`📱 Operator Detection:`, {
+      caregiverId: caregiver.id,
+      recipientNumber: recipientNumber.substring(0, 6) + '***',
+      detectedOperator: operator,
+      paymentReference: paymentReference
+    });
+    
     const withdrawalResult = await paymentService.processWithdrawal({
       amount: netPayout,
       recipientType,
@@ -330,8 +353,23 @@ router.post('/request', async (req, res, next) => {
     let finalStatus = 'pending';
     let processedAt = null;
 
+    logger.info(`🔄 Processing API Response:`, {
+      caregiverId: caregiver.id,
+      paymentReference: paymentReference,
+      apiStatus: withdrawalResult.status,
+      apiDataStatus: withdrawalResult.data?.status
+    });
+
     if (withdrawalResult.status === 'success' && withdrawalResult.data?.status === 'pending') {
       finalStatus = 'processing';
+      
+      logger.info(`💳 Balance Deduction:`, {
+        caregiverId: caregiver.id,
+        paymentReference: paymentReference,
+        previousBalance: parseFloat(earnings.walletBalance),
+        deductionAmount: requestedAmount,
+        newBalance: parseFloat(earnings.walletBalance) - requestedAmount
+      });
       
       // Deduct full requested amount from wallet (platform keeps the fee)
       await earnings.update({
@@ -339,6 +377,12 @@ router.post('/request', async (req, res, next) => {
       });
     } else {
       finalStatus = 'failed';
+      logger.warn(`⚠️ Withdrawal Failed:`, {
+        caregiverId: caregiver.id,
+        paymentReference: paymentReference,
+        apiStatus: withdrawalResult.status,
+        reason: 'API response indicates failure'
+      });
     }
 
     // Update withdrawal request with final status
@@ -367,7 +411,13 @@ router.post('/request', async (req, res, next) => {
       });
     }
 
-    logger.info(`Withdrawal ${finalStatus}: ${paymentReference} for caregiver ${caregiver.id}`);
+    logger.info(`✅ Withdrawal ${finalStatus}: ${paymentReference} for caregiver ${caregiver.id}`, {
+      finalStatus: finalStatus,
+      requestedAmount: parseFloat(withdrawalRequest.requestedAmount),
+      platformFee: platformFee,
+      netPayout: parseFloat(withdrawalRequest.netPayout),
+      chargeId: withdrawalResult.data?.charge_id
+    });
 
     res.status(201).json({
       message: finalStatus === 'completed' ? 'Withdrawal processed successfully' : 
