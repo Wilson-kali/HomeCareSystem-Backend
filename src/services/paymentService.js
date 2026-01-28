@@ -630,19 +630,16 @@ const processWithdrawal = async (withdrawalData) => {
       // Round up amount to integer (caregiver bears rounding cost)
       const roundedAmount = Math.ceil(parseFloat(amount));
       
-      // Format phone number correctly for PayChangu (9 digits after +265)
+      // Format phone number correctly for PayChangu (9 digits without leading 0)
       let formattedPhone = recipientNumber;
       
-      // Remove any existing country code or + symbols
+      // Remove any existing country code or + symbols and leading 0
       formattedPhone = formattedPhone.replace(/^\+?265/, '').replace(/^0/, '');
       
-      // Ensure exactly 9 digits (no additional removal needed)
+      // Ensure exactly 9 digits (no country code, no leading 0)
       if (formattedPhone.length !== 9) {
         throw new Error(`Invalid phone number format. Expected 9 digits, got ${formattedPhone.length}`);
       }
-      
-      // Add +265 prefix
-      formattedPhone = `+265${formattedPhone}`;
       
       // Map operator to PayChangu operator ref_id
       const operatorRefIds = {
