@@ -627,8 +627,8 @@ const processWithdrawal = async (withdrawalData) => {
         throw new Error('Invalid mobile money operator');
       }
       
-      // Remove amount rounding - keep exact amount
-      const exactAmount = parseFloat(amount);
+      // Round up amount to integer (caregiver bears rounding cost)
+      const roundedAmount = Math.ceil(parseFloat(amount));
       
       // Format phone number correctly for PayChangu (9 digits after +265)
       let formattedPhone = recipientNumber;
@@ -636,12 +636,7 @@ const processWithdrawal = async (withdrawalData) => {
       // Remove any existing country code or + symbols
       formattedPhone = formattedPhone.replace(/^\+?265/, '').replace(/^0/, '');
       
-      // For Malawian numbers: if 10 digits starting with 9, remove first 9
-      if (formattedPhone.length === 10 && formattedPhone.startsWith('9')) {
-        formattedPhone = formattedPhone.substring(1); // Remove first 9
-      }
-      
-      // Ensure exactly 9 digits
+      // Ensure exactly 9 digits (no additional removal needed)
       if (formattedPhone.length !== 9) {
         throw new Error(`Invalid phone number format. Expected 9 digits, got ${formattedPhone.length}`);
       }
@@ -659,7 +654,7 @@ const processWithdrawal = async (withdrawalData) => {
       payoutData = {
         mobile_money_operator_ref_id: operatorRefIds[operator],
         mobile: formattedPhone,
-        amount: exactAmount,
+        amount: roundedAmount,
         charge_id: reference
       };
       endpoint = '/mobile-money/payouts/initialize';
@@ -670,8 +665,8 @@ const processWithdrawal = async (withdrawalData) => {
         throw new Error('Bank code and account name are required for bank transfers');
       }
       
-      // Remove amount rounding - keep exact amount
-      const exactAmount = parseFloat(amount);
+      // Round up amount to integer (caregiver bears rounding cost)
+      const roundedAmount = Math.ceil(parseFloat(amount));
       
       // Use correct PayChangu bank payout structure
       payoutData = {
@@ -679,7 +674,7 @@ const processWithdrawal = async (withdrawalData) => {
         bank_uuid: bankCode, // bankCode should be the bank UUID from PayChangu
         account_name: accountName,
         account_number: recipientNumber,
-        amount: exactAmount,
+        amount: roundedAmount,
         charge_id: reference
       };
       endpoint = '/direct-charge/payouts/initialize';
@@ -691,7 +686,8 @@ const processWithdrawal = async (withdrawalData) => {
     logger.info(`💳 Withdrawal API Request:`, {
       endpoint: `${paymentConfig.paychangu.apiUrl}${endpoint}`,
       reference: reference,
-      exactAmount: payoutData.amount,
+      originalAmount: parseFloat(amount),
+      roundedAmount: payoutData.amount,
       recipientType: recipientType,
       recipientNumber: recipientNumber.substring(0, 6) + '***',
       formattedPhone: payoutData.mobile?.substring(0, 8) + '***' || 'N/A',
