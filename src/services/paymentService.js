@@ -691,7 +691,7 @@ const processWithdrawal = async (withdrawalData) => {
       status: error.response?.status,
       statusText: error.response?.statusText,
       responseData: error.response?.data,
-      endpoint: `${paymentConfig.paychangu.apiUrl}${endpoint || 'unknown'}`,
+      recipientType: withdrawalData.recipientType,
       amount: withdrawalData.amount
     });
     throw error;
