@@ -268,6 +268,12 @@ router.post('/request', async (req, res, next) => {
       });
     }
 
+    // Calculate platform fee based on withdrawal type and PayChangu rates
+    const requestedAmount = parseFloat(amount);
+    
+    // Generate secure payment reference
+    const paymentReference = `WD${Date.now()}${caregiver.id}${crypto.randomInt(1000, 9999)}`;
+
     logger.info(`💰 Withdrawal Request Started:`, {
       caregiverId: caregiver.id,
       requestedAmount: requestedAmount,
@@ -276,8 +282,6 @@ router.post('/request', async (req, res, next) => {
       paymentReference: paymentReference
     });
 
-    // Calculate platform fee based on withdrawal type and PayChangu rates
-    const requestedAmount = parseFloat(amount);
     let platformFee = 0;
     
     if (recipientType === 'mobile_money') {
@@ -307,9 +311,6 @@ router.post('/request', async (req, res, next) => {
         platformFee: platformFee.toFixed(2)
       });
     }
-    
-    // Generate secure payment reference
-    const paymentReference = `WD${Date.now()}${caregiver.id}${crypto.randomInt(1000, 9999)}`;
 
     // Create withdrawal request with pending status
     const withdrawalRequest = await WithdrawalRequest.create({
