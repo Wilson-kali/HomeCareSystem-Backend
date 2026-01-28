@@ -270,15 +270,19 @@ router.post('/request', async (req, res, next) => {
     console.log('ALL VALIDATIONS PASSED');
     logger.info('✅ All validations passed, proceeding with withdrawal');
 
+    console.log('🔍 Finding caregiver...');
     const caregiver = await Caregiver.findOne({ 
       where: { userId: req.user.id },
       include: [{ model: User, attributes: ['firstName', 'lastName', 'email'] }]
     });
     
     if (!caregiver) {
+      console.log('❌ Caregiver not found');
       return res.status(404).json({ error: 'Caregiver profile not found' });
     }
+    console.log('✅ Caregiver found:', caregiver.id);
 
+    console.log('🔍 Verifying withdrawal token...');
     // Verify token with timing attack protection
     const withdrawalToken = await WithdrawalToken.findOne({
       where: {
@@ -290,23 +294,30 @@ router.post('/request', async (req, res, next) => {
     });
 
     if (!withdrawalToken) {
+      console.log('❌ Invalid or expired token');
       logger.warn(`Invalid withdrawal attempt by caregiver ${caregiver.id}`);
       return res.status(400).json({ error: 'Invalid or expired withdrawal token' });
     }
+    console.log('✅ Token verified');
 
+    console.log('🔄 Marking token as used...');
     // Mark token as used immediately
     await withdrawalToken.update({ used: true });
+    console.log('✅ Token marked as used');
 
+    console.log('🔍 Checking earnings...');
     const earnings = await CaregiverEarnings.findOne({
       where: { caregiverId: caregiver.id }
     });
 
     if (!earnings || parseFloat(earnings.walletBalance) < parseFloat(amount)) {
+      console.log('❌ Insufficient balance');
       return res.status(400).json({ 
         error: 'Insufficient balance',
         availableBalance: earnings ? parseFloat(earnings.walletBalance).toFixed(2) : '0.00'
       });
     }
+    console.log('✅ Balance check passed:', earnings.walletBalance);
 
     // Calculate platform fee based on withdrawal type and PayChangu rates
     const requestedAmount = parseFloat(amount);
