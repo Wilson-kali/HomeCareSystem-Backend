@@ -8,7 +8,7 @@ Version: 1.0
 
 1. Definitions
 
-Platform – The Home Care System, including web and mobile applications.
+Platform – The CareConnect platform, including web and mobile applications.
 
 Patient – An individual receiving healthcare services through the platform.
 

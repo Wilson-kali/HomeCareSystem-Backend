@@ -50,7 +50,7 @@ const initiateBookingPayment = async (bookingData, customerDetails, pendingBooki
       return_url: `${process.env.FRONTEND_URL}/dashboard/billing?status=success`,
       tx_ref: tx_ref,
       customization: {
-        title: 'Home Care System',
+        title: 'CareConnect Booking Payment',
         description: `Booking Fee for Appointment with ${specialty.name}`
       }
     };

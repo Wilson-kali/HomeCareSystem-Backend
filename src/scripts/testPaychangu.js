@@ -16,7 +16,7 @@ const testPaychanguConnection = async () => {
       return_url: `${process.env.FRONTEND_URL}/dashboard/billing?status=success`,
       tx_ref: `TEST-${Date.now()}`,
       customization: {
-        title: 'Home Care System Test',
+        title: 'CareConnect Test',
         description: 'Test payment integration with phone +265 998 95 15 10'
       }
     };

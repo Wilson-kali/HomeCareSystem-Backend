@@ -39,13 +39,13 @@ const sendSMS = async (phoneNumber, message) => {
 };
 
 const sendAppointmentReminder = async (phoneNumber, appointmentDetails) => {
-  const message = `HOME CARE SYSTEM\n\nAppointment Reminder:\nDate: ${appointmentDetails.scheduledDate}\nCaregiver: ${appointmentDetails.caregiverName}\nType: ${appointmentDetails.sessionType}\n\nThank you!`;
+  const message = `CareConnect\n\nAppointment Reminder:\nDate: ${appointmentDetails.scheduledDate}\nCaregiver: ${appointmentDetails.caregiverName}\nType: ${appointmentDetails.sessionType}\n\nThank you!`;
   
   return sendSMS(phoneNumber, message);
 };
 
 const sendStatusAlert = async (phoneNumber, alertDetails) => {
-  const message = `HOME CARE SYSTEM\n\nURGENT ALERT\nPatient: ${alertDetails.patientName}\nStatus: ${alertDetails.severity.toUpperCase()}\nMessage: ${alertDetails.message}\n\nPlease take immediate action.`;
+  const message = `CareConnect\n\nURGENT ALERT\nPatient: ${alertDetails.patientName}\nStatus: ${alertDetails.severity.toUpperCase()}\nMessage: ${alertDetails.message}\n\nPlease take immediate action.`;
   
   return sendSMS(phoneNumber, message);
 };

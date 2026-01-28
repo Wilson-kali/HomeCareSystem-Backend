@@ -35,7 +35,7 @@ const sendEmail = async (to, subject, html) => {
 };
 
 const sendAppointmentConfirmation = async (patientEmail, appointmentDetails) => {
-  const subject = 'Appointment Confirmation - Home Care System';
+  const subject = 'Appointment Confirmation - CareConnect';
   const formattedDate = new Date(appointmentDetails.scheduledDate).toLocaleString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -119,7 +119,7 @@ const sendAppointmentConfirmation = async (patientEmail, appointmentDetails) => 
           </center>
         </div>
         <div class="footer">
-          <p>© ${new Date().getFullYear()} Home Care System. All rights reserved.</p>
+          <p>© ${new Date().getFullYear()} CareConnect. All rights reserved.</p>
           <p>This is an automated message, please do not reply directly to this email.</p>
         </div>
       </div>
@@ -192,7 +192,7 @@ const sendStatusAlert = async (recipientEmail, alertDetails) => {
           </center>
         </div>
         <div class="footer">
-          <p>© ${new Date().getFullYear()} Home Care System. All rights reserved.</p>
+          <p>© ${new Date().getFullYear()} CareConnect. All rights reserved.</p>
           <p>This is an automated alert. For urgent matters, please contact the care team directly.</p>
         </div>
       </div>
@@ -480,7 +480,7 @@ const sendPasswordResetEmail = async (email, firstName, resetUrl) => {
 };
 
 const sendPaymentConfirmation = async (patientEmail, paymentDetails) => {
-  const subject = 'Payment Confirmation - Home Care System';
+  const subject = 'Payment Confirmation - CareConnect';
   const formattedDate = new Date(paymentDetails.appointmentDate).toLocaleString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -571,7 +571,7 @@ const sendPaymentConfirmation = async (patientEmail, paymentDetails) => {
           </center>
         </div>
         <div class="footer">
-          <p>© ${new Date().getFullYear()} Home Care System. All rights reserved.</p>
+          <p>© ${new Date().getFullYear()} CareConnect. All rights reserved.</p>
           <p>Keep this email as your payment receipt.</p>
         </div>
       </div>
@@ -583,7 +583,7 @@ const sendPaymentConfirmation = async (patientEmail, paymentDetails) => {
 };
 
 const sendPaymentFailureNotification = async (patientEmail, paymentDetails) => {
-  const subject = 'Payment Failed - Home Care System';
+  const subject = 'Payment Failed - CareConnect';
 
   const html = `
     <!DOCTYPE html>
@@ -655,7 +655,7 @@ const sendPaymentFailureNotification = async (patientEmail, paymentDetails) => {
           </center>
         </div>
         <div class="footer">
-          <p>© ${new Date().getFullYear()} Home Care System. All rights reserved.</p>
+          <p>© ${new Date().getFullYear()} CareConnect. All rights reserved.</p>
           <p>Need help? Contact our support team at support@homecaresystem.com</p>
         </div>
       </div>
@@ -667,7 +667,7 @@ const sendPaymentFailureNotification = async (patientEmail, paymentDetails) => {
 };
 
 const sendBookingExpiredNotification = async (patientEmail, bookingDetails) => {
-  const subject = 'Booking Expired - Home Care System';
+  const subject = 'Booking Expired - CareConnect';
   const formattedExpiry = new Date(bookingDetails.expiresAt).toLocaleString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
@@ -738,7 +738,7 @@ const sendBookingExpiredNotification = async (patientEmail, bookingDetails) => {
           </center>
         </div>
         <div class="footer">
-          <p>© ${new Date().getFullYear()} Home Care System. All rights reserved.</p>
+          <p>© ${new Date().getFullYear()} CareConnect. All rights reserved.</p>
           <p>Questions? Contact support@homecaresystem.com</p>
         </div>
       </div>
@@ -994,7 +994,7 @@ const sendUserWelcomeEmail = async (userDetails) => {
 };
 
 const sendCaregiverAppointmentNotification = async (caregiverEmail, appointmentDetails) => {
-  const subject = 'New Appointment Booked - Home Care System';
+  const subject = 'New Appointment Booked - CareConnect';
   const formattedDate = new Date(appointmentDetails.scheduledDate).toLocaleString('en-US', {
     weekday: 'long',
     year: 'numeric',
@@ -1084,7 +1084,7 @@ const sendCaregiverAppointmentNotification = async (caregiverEmail, appointmentD
           </center>
         </div>
         <div class="footer">
-          <p>© ${new Date().getFullYear()} Home Care System. All rights reserved.</p>
+          <p>© ${new Date().getFullYear()} CareConnect. All rights reserved.</p>
           <p>This is an automated message, please do not reply directly to this email.</p>
         </div>
       </div>

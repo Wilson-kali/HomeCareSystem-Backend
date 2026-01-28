@@ -427,7 +427,7 @@ const initiateSessionPayment = async (req, res, next) => {
       return_url: `${process.env.FRONTEND_URL}/appointments`,
       tx_ref: tx_ref,
       customization: {
-        title: 'Home Care System',
+        title: 'CareConnect ',
         description: `Session Fee for Appointment #${appointmentId} (incl. ${taxRate}% tax & ${convenienceFeeRate}% processing fee)`
       }
     };
