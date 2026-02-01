@@ -627,8 +627,9 @@ const processWithdrawal = async (withdrawalData) => {
         throw new Error('Invalid mobile money operator');
       }
       
-      // Round up amount to integer (caregiver bears rounding cost)
-      const roundedAmount = Math.ceil(parseFloat(amount));
+      // Round to nearest integer (fair rounding)
+      // Math.round: 77.5 → 78, 77.4 → 77 (fairer than Math.ceil which always rounds up)
+      const roundedAmount = Math.round(parseFloat(amount));
       
       // Format phone number correctly for PayChangu (9 digits without leading 0)
       let formattedPhone = recipientNumber;
@@ -662,8 +663,9 @@ const processWithdrawal = async (withdrawalData) => {
         throw new Error('Bank code and account name are required for bank transfers');
       }
       
-      // Round up amount to integer (caregiver bears rounding cost)
-      const roundedAmount = Math.ceil(parseFloat(amount));
+      // Round to nearest integer (fair rounding)
+      // Math.round: 77.5 → 78, 77.4 → 77 (fairer than Math.ceil which always rounds up)
+      const roundedAmount = Math.round(parseFloat(amount));
       
       // Use correct PayChangu bank payout structure
       payoutData = {

@@ -440,34 +440,51 @@ router.post('/request', async (req, res, next) => {
     let finalStatus = 'pending';
     let processedAt = null;
 
+    // PayChangu response structure: { status: 'success', data: { transaction: { status: '...' } } }
+    const transactionStatus = withdrawalResult.data?.transaction?.status || withdrawalResult.data?.status;
+
     logger.info(`🔄 Processing API Response:`, {
       caregiverId: caregiver.id,
       paymentReference: paymentReference,
       apiStatus: withdrawalResult.status,
-      apiDataStatus: withdrawalResult.data?.status
+      transactionStatus: transactionStatus
     });
 
-    if (withdrawalResult.status === 'success' && withdrawalResult.data?.status === 'pending') {
-      finalStatus = 'processing';
-      
-      logger.info(`💳 Balance Deduction:`, {
-        caregiverId: caregiver.id,
-        paymentReference: paymentReference,
-        previousBalance: parseFloat(earnings.walletBalance),
-        deductionAmount: requestedAmount,
-        newBalance: parseFloat(earnings.walletBalance) - requestedAmount
-      });
-      
-      // Deduct full requested amount from wallet (platform keeps the fee)
-      await earnings.update({
-        walletBalance: parseFloat(earnings.walletBalance) - requestedAmount
-      });
+    if (withdrawalResult.status === 'success') {
+      // Check transaction status to determine final state
+      if (transactionStatus === 'success') {
+        finalStatus = 'completed';
+        processedAt = new Date();
+      } else if (transactionStatus === 'pending' || transactionStatus === 'processing') {
+        finalStatus = 'processing';
+      } else {
+        // Any other status is considered failed
+        finalStatus = 'failed';
+      }
+
+      // Only deduct balance if not failed
+      if (finalStatus !== 'failed') {
+        logger.info(`💳 Balance Deduction:`, {
+          caregiverId: caregiver.id,
+          paymentReference: paymentReference,
+          previousBalance: parseFloat(earnings.walletBalance),
+          deductionAmount: requestedAmount,
+          newBalance: parseFloat(earnings.walletBalance) - requestedAmount,
+          finalStatus: finalStatus
+        });
+
+        // Deduct full requested amount from wallet (platform keeps the fee)
+        await earnings.update({
+          walletBalance: parseFloat(earnings.walletBalance) - requestedAmount
+        });
+      }
     } else {
       finalStatus = 'failed';
       logger.warn(`⚠️ Withdrawal Failed:`, {
         caregiverId: caregiver.id,
         paymentReference: paymentReference,
         apiStatus: withdrawalResult.status,
+        transactionStatus: transactionStatus,
         reason: 'API response indicates failure'
       });
     }
