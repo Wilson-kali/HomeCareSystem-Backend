@@ -24,17 +24,26 @@ if (!fs.existsSync(uploadsDir)) {
 
 const app = express();
 const server = createServer(app);
+
+// Parse allowed origins from environment variable (comma-separated)
+const allowedOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map(url => url.trim())
+  : ["http://localhost:5173"];
+
+logger.info('🌐 Allowed CORS origins:', allowedOrigins);
+
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
-    methods: ["GET", "POST"]
+    origin: allowedOrigins,
+    methods: ["GET", "POST"],
+    credentials: true
   }
 });
 
 // Middleware
 app.use(helmet());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  origin: allowedOrigins,
   credentials: true
 }));
 app.use(morgan('combined'));
