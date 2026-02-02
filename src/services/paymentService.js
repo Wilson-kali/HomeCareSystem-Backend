@@ -4,6 +4,7 @@ const { PaymentTransaction, PendingPaymentTransaction, Appointment, Caregiver, U
 const { PAYMENT_STATUS } = require('../utils/constants');
 const paymentConfig = require('../config/payment');
 const logger = require('../utils/logger');
+const { getPrimaryFrontendUrl } = require('../utils/config');
 const { sendPaymentConfirmation, sendPaymentFailureNotification, sendCaregiverAppointmentNotification } = require('./emailService');
 const bookingService = require('./bookingService');
 const NotificationHelper = require('../utils/notificationHelper');
@@ -47,7 +48,7 @@ const initiateBookingPayment = async (bookingData, customerDetails, pendingBooki
       last_name: customerDetails.lastName,
       phone_number: customerDetails.phone,
       callback_url: `${paymentConfig.paychangu.webhookBaseUrl}/api/payments/webhook`,
-      return_url: `${process.env.FRONTEND_URL}/dashboard/billing?status=success`,
+      return_url: `${getPrimaryFrontendUrl()}/dashboard/billing?status=success`,
       tx_ref: tx_ref,
       customization: {
         title: 'CareConnect Booking Payment',
@@ -407,7 +408,7 @@ const processWebhook = async (webhookData, signature) => {
           });
 
           // Construct magic links only for teleconference sessions
-          const appUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+          const appUrl = getPrimaryFrontendUrl();
           const patientMeetingUrl = fullAppointment.sessionType === 'teleconference' && fullAppointment.patientMeetingToken
             ? `${appUrl}/meeting/join/${fullAppointment.patientMeetingToken}`
             : null;

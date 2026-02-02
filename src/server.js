@@ -12,6 +12,7 @@ const db = require('./models');
 const routes = require('./routes');
 const { errorHandler } = require('./middleware/errorHandler.middleware');
 const logger = require('./utils/logger');
+const { getAllowedOrigins } = require('./utils/config');
 const cleanupService = require('./services/cleanupService');
 const { startEmailProcessor } = require('./jobs/emailProcessor');
 
@@ -26,9 +27,7 @@ const app = express();
 const server = createServer(app);
 
 // Parse allowed origins from environment variable (comma-separated)
-const allowedOrigins = process.env.FRONTEND_URL
-  ? process.env.FRONTEND_URL.split(',').map(url => url.trim())
-  : ["http://localhost:5173"];
+const allowedOrigins = getAllowedOrigins();
 
 logger.info('🌐 Allowed CORS origins:', allowedOrigins);
 

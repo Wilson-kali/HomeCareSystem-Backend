@@ -1,5 +1,6 @@
 const { Resend } = require('resend');
 const logger = require('../utils/logger');
+const { getPrimaryFrontendUrl } = require('../utils/config');
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -115,7 +116,7 @@ const sendAppointmentConfirmation = async (patientEmail, appointmentDetails) => 
           <p>If you need to reschedule or cancel, please contact us at least 24 hours in advance.</p>
 
           <center>
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:8080'}/dashboard/appointments" class="button" style="color: white !important;">View Appointment</a>
+            <a href="${getPrimaryFrontendUrl()}/dashboard/appointments" class="button" style="color: white !important;">View Appointment</a>
           </center>
         </div>
         <div class="footer">
@@ -188,7 +189,7 @@ const sendStatusAlert = async (recipientEmail, alertDetails) => {
           <p><strong>Action Required:</strong> Please review the patient's condition and take appropriate action immediately.</p>
 
           <center>
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:8080'}/dashboard/reports" class="button" style="color: white !important;">View Care Reports</a>
+            <a href="${getPrimaryFrontendUrl()}/dashboard/reports" class="button" style="color: white !important;">View Care Reports</a>
           </center>
         </div>
         <div class="footer">
@@ -282,7 +283,7 @@ const sendCaregiverRegistrationNotification = async (email, firstName) => {
 
 const sendCaregiverVerificationNotification = async (email, firstName) => {
   const systemName = process.env.SYSTEM || 'CareConnect';
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+  const frontendUrl = getPrimaryFrontendUrl();
   const subject = `Account Verified - ${systemName}`;
   const html = `
     <!DOCTYPE html>
@@ -567,7 +568,7 @@ const sendPaymentConfirmation = async (patientEmail, paymentDetails) => {
           <p>Your appointment is confirmed and the caregiver has been notified. You will receive a reminder 24 hours before your scheduled appointment.</p>
 
           <center>
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:8080'}/dashboard/appointments" class="button" style="color: white !important;">View Appointment</a>
+            <a href="${getPrimaryFrontendUrl()}/dashboard/appointments" class="button" style="color: white !important;">View Appointment</a>
           </center>
         </div>
         <div class="footer">
@@ -651,7 +652,7 @@ const sendPaymentFailureNotification = async (patientEmail, paymentDetails) => {
           <p>The time slot you selected has been released and is available for rebooking. We recommend booking soon to secure your preferred time.</p>
 
           <center>
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:8080'}/dashboard/caregiver-availability" class="button" style="color: white !important;">Book Again</a>
+            <a href="${getPrimaryFrontendUrl()}/dashboard/caregiver-availability" class="button" style="color: white !important;">Book Again</a>
           </center>
         </div>
         <div class="footer">
@@ -734,7 +735,7 @@ const sendBookingExpiredNotification = async (patientEmail, bookingDetails) => {
           <p><strong>Tip:</strong> Complete your payment within 10 minutes to secure your booking. Have your payment method ready before starting the booking process.</p>
 
           <center>
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:8080'}/dashboard/caregiver-availability" class="button" style="color: white !important;">View Available Slots</a>
+            <a href="${getPrimaryFrontendUrl()}/dashboard/caregiver-availability" class="button" style="color: white !important;">View Available Slots</a>
           </center>
         </div>
         <div class="footer">
@@ -819,7 +820,7 @@ const sendRescheduleNotification = async (recipientEmail, recipientName, resched
           <p>Please update your calendar with the new appointment time. If you have any concerns about this change, please contact ${isPatient ? 'your patient' : 'your caregiver'} directly.</p>
 
           <center>
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:8080'}/dashboard/${isPatient ? 'appointments' : 'schedule'}" class="button" style="color: white !important;">View ${isPatient ? 'Appointments' : 'Schedule'}</a>
+            <a href="${getPrimaryFrontendUrl()}/dashboard/${isPatient ? 'appointments' : 'schedule'}" class="button" style="color: white !important;">View ${isPatient ? 'Appointments' : 'Schedule'}</a>
           </center>
         </div>
         <div class="footer">
@@ -885,7 +886,7 @@ const sendCancellationNotification = async (recipientEmail, recipientName, appoi
           <p>The time slot has been released and is now available for other bookings. No refund will be processed as per our cancellation policy.</p>
 
           <center>
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:8080'}/dashboard/appointments" class="button" style="color: white !important;">View Appointments</a>
+            <a href="${getPrimaryFrontendUrl()}/dashboard/appointments" class="button" style="color: white !important;">View Appointments</a>
           </center>
         </div>
         <div class="footer">
@@ -973,7 +974,7 @@ const sendUserWelcomeEmail = async (userDetails) => {
           </ul>
 
           <center>
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:8080'}/login" class="button" style="color: white !important;">Login to ${systemName}</a>
+            <a href="${getPrimaryFrontendUrl()}/login" class="button" style="color: white !important;">Login to ${systemName}</a>
           </center>
 
           <p>If you have any questions or need assistance, please contact the system administrator.</p>
@@ -1234,7 +1235,7 @@ const sendDataProtectionNotification = async (userData) => {
 const sendCustomMessageToCaregiver = async (caregiverEmail, caregiverFirstName, senderName, subject, messageContent) => {
   const systemName = process.env.SYSTEM || 'CareConnect';
   const emailSubject = `${subject} - ${systemName}`;
-  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+  const frontendUrl = getPrimaryFrontendUrl();
 
   const html = `
     <!DOCTYPE html>
