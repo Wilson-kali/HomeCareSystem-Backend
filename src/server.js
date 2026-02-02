@@ -30,6 +30,7 @@ const server = createServer(app);
 const allowedOrigins = getAllowedOrigins();
 
 logger.info('🌐 Allowed CORS origins:', allowedOrigins);
+logger.info('🔧 CORS configured for mobile networks and preflight requests');
 
 const io = new Server(server, {
   cors: {
@@ -40,11 +41,29 @@ const io = new Server(server, {
 });
 
 // Middleware
-app.use(helmet());
-app.use(cors({
-  origin: allowedOrigins,
-  credentials: true
+app.use(helmet({
+  crossOriginResourcePolicy: false // Fix for African mobile ISPs
 }));
+
+// CORS configuration - bulletproof for mobile networks
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, health checks)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+
+    return callback(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions)); // Critical for preflight requests
 app.use(morgan('combined'));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
