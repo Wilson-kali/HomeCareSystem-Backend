@@ -8,7 +8,7 @@ const router = express.Router();
 router.get('/caregivers', async (req, res, next) => {
   try {
     const { User, Role, Caregiver, Specialty, sequelize } = require('../models');
-    const { page = 1, limit = 70, specialtyId, region, district, traditionalAuthority, village, search } = req.query;
+    const { page = 1, limit = 100, specialtyId, region, district, traditionalAuthority, village, search } = req.query;
 
     const offset = (parseInt(page) - 1) * parseInt(limit);
     const caregiverRole = await Role.findOne({ where: { name: 'caregiver' } });
@@ -29,8 +29,10 @@ router.get('/caregivers', async (req, res, next) => {
       ];
     }
 
-    // Build where clause for Caregiver (location filters)
-    let caregiverWhereClause = {};
+    // Build where clause for Caregiver (location filters + verification status)
+    let caregiverWhereClause = {
+      verificationStatus: 'APPROVED' // Only show approved caregivers to public
+    };
 
     if (region) {
       caregiverWhereClause.region = region;
@@ -79,22 +81,16 @@ router.get('/caregivers', async (req, res, next) => {
       include: [
         {
           model: Caregiver,
-          required: caregiverRequired, // INNER JOIN when filters applied, LEFT JOIN otherwise
+          required: caregiverRequired,
           where: Object.keys(caregiverWhereClause).length > 0 ? caregiverWhereClause : undefined,
           attributes: [
             'id',
-            'userId',
-            'licenseNumber',
-            'licensingInstitution',
             'experience',
             'qualifications',
+            'licensingInstitution',
             'verificationStatus',
-            'hourlyRate',
-            'availability',
             'bio',
             'profileImage',
-            'supportingDocuments',
-            'idDocuments',
             'appointmentDuration',
             'autoConfirm',
             'region',
@@ -103,16 +99,17 @@ router.get('/caregivers', async (req, res, next) => {
             'village'
           ],
           include: [specialtyInclude]
-        },
-        { model: Role }
+        }
       ],
+      attributes: ['id', 'firstName', 'lastName', 'email', 'phone'],
       limit: parseInt(limit),
       offset: parseInt(offset),
       order: [['createdAt', 'DESC']],
-      distinct: true // Ensures correct count with joins
+      distinct: true,
+      subQuery: false
     });
 
-    // Return in the format the frontend expects - keep nested structure
+    // Return optimized data structure
     const formattedCaregivers = await Promise.all(caregivers.map(async (user) => {
       const userData = user.toJSON();
       
@@ -141,9 +138,11 @@ router.get('/caregivers', async (req, res, next) => {
     res.json({
       success: true,
       caregivers: formattedCaregivers,
-      total: count,
-      page: parseInt(page),
-      totalPages: Math.ceil(count / parseInt(limit))
+      pagination: {
+        total: count,
+        page: parseInt(page),
+        totalPages: Math.ceil(count / parseInt(limit))
+      }
     });
   } catch (error) {
     next(error);

@@ -425,9 +425,10 @@ const forgotPassword = async (req, res, next) => {
 
     console.log('💾 Token saved to database');
 
-    // Queue email with reset link
+    // Queue email with reset link using primary frontend URL
     const EmailScheduler = require('../services/emailScheduler');
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${resetToken}`;
+    const { getPrimaryFrontendUrl } = require('../utils/config');
+    const resetUrl = `${getPrimaryFrontendUrl()}/reset-password?token=${resetToken}`;
     
     await EmailScheduler.queueEmail(user.email, 'password_reset', {
       email: user.email,
