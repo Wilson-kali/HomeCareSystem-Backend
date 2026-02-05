@@ -684,7 +684,9 @@ INSERT INTO `permissions` (`name`, `description`) VALUES
 ('view_payments', 'View payment transactions'),
 ('manage_payments', 'Process payments and refunds'),
 ('manage_users', 'Manage all users'),
-('system_settings', 'Access system settings');
+('system_settings', 'Access system settings'),
+('view_withdrawal_requests', 'View caregiver withdrawal requests and balances'),
+('manage_withdrawals', 'Manage and process withdrawal requests');
 
 -- Insert default meeting settings
 INSERT INTO `meeting_settings` (`default_duration`, `allow_early_join_minutes`, `max_late_join_minutes`, `max_meeting_duration`, `record_meetings`, `video_quality`)
