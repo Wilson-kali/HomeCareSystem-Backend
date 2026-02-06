@@ -107,6 +107,16 @@ const Caregiver = sequelize.define('Caregiver', {
       }
       return Array.isArray(value) ? value : [value];
     }
+  },
+  referralBoostScore: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: 'Boost score from successful referrals (1 point per converted referral)'
+  },
+  referralCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    comment: 'Total number of converted referrals'
   }
 }, {
   tableName: 'caregivers'

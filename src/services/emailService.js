@@ -1431,6 +1431,91 @@ const sendWithdrawalSuccessEmail = async (caregiverEmail, withdrawalDetails) => 
   return sendEmail(caregiverEmail, subject, html);
 };
 
+const sendReferralInvitation = async (details) => {
+  const { recipientEmail, caregiverName, referralLink, personalMessage } = details;
+  const systemName = process.env.SYSTEM || 'CareConnect';
+  const subject = `${caregiverName} recommends ${systemName} Healthcare`;
+
+  const html = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; background-color: #f5f5f5; }
+        .container { max-width: 600px; margin: 20px auto; background: white; }
+        .header { padding: 30px 20px; text-align: center; border-bottom: 2px solid #e5e5e5; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; }
+        .header h1 { margin: 0; font-size: 24px; font-weight: 600; }
+        .content { padding: 30px 20px; }
+        .highlight-box { background: #f0f8ff; padding: 20px; border-left: 4px solid #667eea; margin: 20px 0; border-radius: 4px; }
+        .message-box { background: #fff9f0; padding: 20px; border: 1px solid #ffd89b; border-radius: 4px; margin: 20px 0; }
+        .features-box { background: #f9f9f9; padding: 20px; border: 1px solid #e5e5e5; border-radius: 4px; margin: 20px 0; }
+        .button { display: inline-block; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white !important; padding: 14px 32px; text-decoration: none; border-radius: 4px; margin: 20px 0; font-size: 16px; font-weight: 600; box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3); }
+        .footer { text-align: center; color: #666; padding: 20px; font-size: 12px; border-top: 1px solid #e5e5e5; background: #fafafa; }
+        ul { padding-left: 20px; margin: 10px 0; }
+        li { margin-bottom: 8px; }
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <h1>🌟 You've Been Referred to ${systemName}</h1>
+        </div>
+        <div class="content">
+          <p>Hello,</p>
+          <p><strong>${caregiverName}</strong>, a trusted healthcare caregiver, has recommended ${systemName} to you for quality home healthcare services.</p>
+
+          ${personalMessage ? `
+          <div class="message-box">
+            <h3 style="margin: 0 0 10px 0; color: #856404;">📝 Personal Message from ${caregiverName}:</h3>
+            <p style="margin: 0; font-style: italic;">"${personalMessage}"</p>
+          </div>
+          ` : ''}
+
+          <div class="highlight-box">
+            <h3 style="margin: 0 0 15px 0; color: #667eea;">Why Choose ${systemName}?</h3>
+            <ul style="margin: 0;">
+              <li>✅ <strong>Verified Healthcare Professionals</strong> - All caregivers are credential-verified</li>
+              <li>🏠 <strong>Convenient Home Care Services</strong> - Healthcare at your doorstep</li>
+              <li>📹 <strong>Secure Video Consultations</strong> - Connect from anywhere</li>
+              <li>⏰ <strong>Easy Appointment Scheduling</strong> - Book at your convenience</li>
+              <li>💳 <strong>Secure Payment Processing</strong> - Safe and reliable transactions</li>
+            </ul>
+          </div>
+
+          <center>
+            <a href="${referralLink}" class="button" style="color: white !important;">Get Started with ${systemName}</a>
+          </center>
+
+          <p style="font-size: 13px; color: #666; text-align: center; margin-top: 20px;">
+            This referral link helps ${caregiverName} be recommended to more patients like you.<br>
+            By signing up, you support their professional recognition on our platform.
+          </p>
+
+          <div class="features-box">
+            <h3 style="margin: 0 0 15px 0;">Getting Started is Easy:</h3>
+            <ol style="margin: 0; padding-left: 20px;">
+              <li>Click the button above to create your free account</li>
+              <li>Complete your patient profile</li>
+              <li>Browse verified caregivers and specialties</li>
+              <li>Book your first appointment</li>
+            </ol>
+          </div>
+
+          <p>Join hundreds of patients who trust ${systemName} for their healthcare needs.</p>
+        </div>
+        <div class="footer">
+          <p><strong>${systemName} Healthcare Platform</strong></p>
+          <p>© ${new Date().getFullYear()} ${systemName}. All rights reserved.</p>
+          <p>This email was sent because ${caregiverName} thought you might benefit from our healthcare services.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  return sendEmail(recipientEmail, subject, html);
+};
+
 module.exports = {
   sendEmail,
   sendAppointmentConfirmation,
@@ -1451,4 +1536,5 @@ module.exports = {
   sendDataProtectionNotification,
   sendWithdrawalTokenEmail,
   sendWithdrawalSuccessEmail,
+  sendReferralInvitation,
 };

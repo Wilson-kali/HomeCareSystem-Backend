@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { User, Patient, Caregiver, PrimaryPhysician, Role } = require('../models');
+const { User, Patient, Caregiver, PrimaryPhysician, Role, Referral } = require('../models');
 const { jwtSecret, jwtExpiresIn, bcryptRounds } = require('../config/auth');
 const { USER_ROLES } = require('../utils/constants');
 const { sanitizeUser } = require('../utils/helpers');
@@ -15,8 +15,15 @@ const generateToken = (userId) => {
 
 const register = asyncHandler(async (req, res, next) => {
   const result = await executeWithRetry(async (transaction) => {
-    const { email, password, firstName, lastName, phone, idNumber, role = 'patient', ...roleSpecificData } = req.body;
+    const { email, password, firstName, lastName, phone, idNumber, role = 'patient', referralCode, ...roleSpecificData } = req.body;
     const uploadedFiles = req.files || {};
+
+    console.log('📝 Registration data received:', {
+      email,
+      role,
+      referralCode: referralCode || 'NOT PROVIDED',
+      hasFiles: Object.keys(uploadedFiles).length > 0
+    });
 
     // Find the role
     const userRole = await Role.findOne({ where: { name: role } });
@@ -84,7 +91,68 @@ const register = asyncHandler(async (req, res, next) => {
         };
         
         console.log('Creating patient with userId:', patientData.userId);
-        await Patient.create(patientData, { transaction });
+        const createdPatient = await Patient.create(patientData, { transaction });
+
+        // Handle referral code if provided
+        if (referralCode) {
+          console.log(`🎫 Processing referral code: ${referralCode}`);
+          console.log(`🔍 Searching for referral with code: ${referralCode.toUpperCase()}, status: pending`);
+          try {
+            const referral = await Referral.findOne({
+              where: {
+                referralCode: referralCode.toUpperCase(),
+                status: 'pending'
+              },
+              transaction
+            });
+
+            console.log(`🔍 Referral found:`, referral ? `Yes (ID: ${referral.id}, Caregiver: ${referral.caregiverId}, Code: ${referral.referralCode})` : 'No');
+
+            if (referral) {
+              // Update referral with patient info
+              await referral.update({
+                patientId: createdPatient.id,
+                referralType: 'patient',
+                status: 'converted',
+                convertedAt: new Date()
+              }, { transaction });
+
+              console.log(`✅ Referral updated: ID ${referral.id}, patientId: ${createdPatient.id}, status: converted`);
+
+              // Increment caregiver boost score
+              const incrementResult = await Caregiver.increment(
+                {
+                  referralBoostScore: 1,
+                  referralCount: 1
+                },
+                {
+                  where: { id: referral.caregiverId },
+                  transaction
+                }
+              );
+
+              console.log(`✅ Caregiver boost incremented for caregiver ${referral.caregiverId}`);
+              console.log(`🎯 Referral fully converted: ${referralCode} → Patient ${createdPatient.id} → Caregiver ${referral.caregiverId}`);
+
+              // Notify referring caregiver (non-blocking)
+              setImmediate(async () => {
+                try {
+                  await NotificationHelper.notifyReferralConversion(
+                    referral.caregiverId,
+                    `${firstName} ${lastName}`
+                  );
+                } catch (notifError) {
+                  console.error('Failed to send referral notification:', notifError);
+                }
+              });
+            } else {
+              console.log(`Referral code ${referralCode} not found or already used`);
+            }
+          } catch (referralError) {
+            console.error('Error processing referral code:', referralError);
+            // Don't fail registration if referral processing fails
+          }
+        }
         break;
       case 'caregiver':
         // Handle document uploads for caregivers
@@ -167,6 +235,67 @@ const register = asyncHandler(async (req, res, next) => {
         if (roleSpecificData.specialties && Array.isArray(roleSpecificData.specialties) && createdCaregiver) {
           const specialtyIds = roleSpecificData.specialties.map(id => parseInt(id));
           await createdCaregiver.setSpecialties(specialtyIds, { transaction });
+        }
+
+        // Handle referral code if provided (caregiver-to-caregiver referral)
+        if (referralCode) {
+          console.log(`🎫 Processing caregiver referral code: ${referralCode}`);
+          console.log(`🔍 Searching for referral with code: ${referralCode.toUpperCase()}, status: pending`);
+          try {
+            const referral = await Referral.findOne({
+              where: {
+                referralCode: referralCode.toUpperCase(),
+                status: 'pending'
+              },
+              transaction
+            });
+
+            console.log(`🔍 Referral found:`, referral ? `Yes (ID: ${referral.id}, Caregiver: ${referral.caregiverId}, Code: ${referral.referralCode})` : 'No');
+
+            if (referral) {
+              // Update referral with caregiver info
+              await referral.update({
+                referredCaregiverId: createdCaregiver.id,
+                referralType: 'caregiver',
+                status: 'converted',
+                convertedAt: new Date()
+              }, { transaction });
+
+              console.log(`✅ Referral updated: ID ${referral.id}, referredCaregiverId: ${createdCaregiver.id}, type: caregiver, status: converted`);
+
+              // Increment referring caregiver boost score
+              const incrementResult = await Caregiver.increment(
+                {
+                  referralBoostScore: 1,
+                  referralCount: 1
+                },
+                {
+                  where: { id: referral.caregiverId },
+                  transaction
+                }
+              );
+
+              console.log(`✅ Caregiver boost incremented for referring caregiver ${referral.caregiverId}`);
+              console.log(`🎯 Caregiver referral fully converted: ${referralCode} → Caregiver ${createdCaregiver.id} → Referring Caregiver ${referral.caregiverId}`);
+
+              // Notify referring caregiver (non-blocking)
+              setImmediate(async () => {
+                try {
+                  await NotificationHelper.notifyReferralConversion(
+                    referral.caregiverId,
+                    `${firstName} ${lastName} (Caregiver)`
+                  );
+                } catch (notifError) {
+                  console.error('Failed to send caregiver referral notification:', notifError);
+                }
+              });
+            } else {
+              console.log(`Referral code ${referralCode} not found or already used`);
+            }
+          } catch (referralError) {
+            console.error('Error processing caregiver referral code:', referralError);
+            // Don't fail registration if referral processing fails
+          }
         }
         break;
       case 'primary_physician':

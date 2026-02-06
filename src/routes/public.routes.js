@@ -96,7 +96,9 @@ router.get('/caregivers', async (req, res, next) => {
             'region',
             'district',
             'traditionalAuthority',
-            'village'
+            'village',
+            'referralBoostScore',
+            'referralCount'
           ],
           include: [specialtyInclude]
         }
@@ -104,7 +106,12 @@ router.get('/caregivers', async (req, res, next) => {
       attributes: ['id', 'firstName', 'lastName', 'email', 'phone'],
       limit: parseInt(limit),
       offset: parseInt(offset),
-      order: [['createdAt', 'DESC']],
+      order: [
+        // Primary sort: Referral boost score (highest first)
+        [Caregiver, 'referralBoostScore', 'DESC'],
+        // Secondary sort: Creation date (most recent first)
+        ['createdAt', 'DESC']
+      ],
       distinct: true,
       subQuery: false
     });

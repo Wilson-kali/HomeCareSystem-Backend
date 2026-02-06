@@ -12,10 +12,16 @@ const authenticateToken = async (req, res, next) => {
 
   try {
     const decoded = jwt.verify(token, jwtSecret);
+    const { Role, Caregiver, Patient, PrimaryPhysician } = require('../models');
     const user = await User.findByPk(decoded.userId, {
-      include: [{ model: require('../models').Role }]
+      include: [
+        { model: Role },
+        { model: Caregiver, required: false },
+        { model: Patient, required: false },
+        { model: PrimaryPhysician, required: false }
+      ]
     });
-    
+
     if (!user || !user.isActive) {
       return res.status(401).json({ error: 'Invalid or inactive user' });
     }
