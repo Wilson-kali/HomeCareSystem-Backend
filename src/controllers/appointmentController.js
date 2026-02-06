@@ -2,6 +2,7 @@ const { Appointment, Patient, Caregiver, User, Specialty, TimeSlot } = require('
 const { APPOINTMENT_STATUS, USER_ROLES, TIMESLOT_STATUS, PAYMENT_STATUS } = require('../utils/constants');
 const { sendAppointmentConfirmation } = require('../services/emailService');
 const NotificationHelper = require('../utils/notificationHelper');
+const { getPrimaryFrontendUrl } = require('../utils/config');
 
 /**
  * @deprecated This endpoint is deprecated and should not be used for new bookings
@@ -515,7 +516,7 @@ const rescheduleAppointment = async (req, res, next) => {
       const newDateTime = `${new Date(newTimeSlot.date).toLocaleDateString()} at ${newTimeSlot.startTime}`;
 
       // Construct magic links for each participant
-      const appUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+      const appUrl = getPrimaryFrontendUrl() || 'http://localhost:8080';
       const patientMeetingUrl = appointment.patientMeetingToken
         ? `${appUrl}/meeting/join/${appointment.patientMeetingToken}`
         : null;

@@ -1081,7 +1081,7 @@ const sendCaregiverAppointmentNotification = async (caregiverEmail, appointmentD
           <p>Please ensure you are available at the scheduled time. The patient is expecting your professional care.</p>
 
           <center>
-            <a href="${process.env.FRONTEND_URL || 'http://localhost:8080'}/dashboard/appointments" class="button" style="color: white !important;">View Appointment</a>
+            <a href="${getPrimaryFrontendUrl() || 'http://localhost:8080'}/dashboard/appointments" class="button" style="color: white !important;">View Appointment</a>
           </center>
         </div>
         <div class="footer">

@@ -8,6 +8,7 @@ const {
 const bookingService = require('../services/bookingService');
 const { User, Patient, TimeSlot, Location } = require('../models');
 const paymentConfig = require('../config/payment');
+const { getPrimaryFrontendUrl } = require('../utils/config');
 
 /**
  * Initiate Booking Payment with Race Condition Prevention
@@ -199,18 +200,18 @@ const handlePaymentWebhook = async (req, res, next) => {
             
             if (transaction) {
               console.log('✅ Payment processed successfully via GET redirect');
-              return res.redirect(`${process.env.FRONTEND_URL}/dashboard/billing?status=success&tx_ref=${tx_ref}`);
+              return res.redirect(`${getPrimaryFrontendUrl()}/dashboard/billing?status=success&tx_ref=${tx_ref}`);
             } else {
               console.log('❌ Payment processing failed');
-              return res.redirect(`${process.env.FRONTEND_URL}/dashboard/billing?status=failed&tx_ref=${tx_ref}`);
+              return res.redirect(`${getPrimaryFrontendUrl()}/dashboard/billing?status=failed&tx_ref=${tx_ref}`);
             }
           } else {
             console.log('❌ Payment verification failed - status:', paymentStatus.status);
-            return res.redirect(`${process.env.FRONTEND_URL}/dashboard/billing?status=failed&tx_ref=${tx_ref}`);
+            return res.redirect(`${getPrimaryFrontendUrl()}/dashboard/billing?status=failed&tx_ref=${tx_ref}`);
           }
         } catch (error) {
           console.error('❌ Payment verification failed:', error);
-          return res.redirect(`${process.env.FRONTEND_URL}/dashboard/billing?status=failed&tx_ref=${tx_ref}`);
+          return res.redirect(`${getPrimaryFrontendUrl()}/dashboard/billing?status=failed&tx_ref=${tx_ref}`);
         }
       }
       return res.status(200).json({ message: 'Webhook endpoint active' });
@@ -424,7 +425,7 @@ const initiateSessionPayment = async (req, res, next) => {
       last_name: customerDetails.lastName,
       phone_number: customerDetails.phone,
       callback_url: `${paymentConfig.paychangu.webhookBaseUrl}/api/payments/webhook`,
-      return_url: `${process.env.FRONTEND_URL}/appointments`,
+      return_url: `${getPrimaryFrontendUrl()}/appointments`,
       tx_ref: tx_ref,
       customization: {
         title: 'CareConnect ',

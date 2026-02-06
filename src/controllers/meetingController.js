@@ -3,6 +3,7 @@ const { canJoinMeeting, generateJitsiMeeting } = require('../services/jitsiServi
 const { Op } = require('sequelize');
 const logger = require('../utils/logger');
 const crypto = require('crypto');
+const { getPrimaryFrontendUrl } = require('../utils/config');
 
 /**
  * Public endpoint - Join meeting using magic link token
@@ -659,7 +660,7 @@ const regenerateMeetingTokens = async (req, res, next) => {
       caregiverMeetingToken: newCaregiverToken
     });
 
-    const appUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+    const appUrl = getPrimaryFrontendUrl() || 'http://localhost:8080';
     const patientMeetingUrl = `${appUrl}/meeting/join/${newPatientToken}`;
     const caregiverMeetingUrl = `${appUrl}/meeting/join/${newCaregiverToken}`;
 

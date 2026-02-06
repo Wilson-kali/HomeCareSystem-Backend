@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { getPrimaryFrontendUrl } = require('../utils/config');
 
 /**
  * Jitsi Meeting Service
@@ -61,7 +62,7 @@ const generateJitsiMeeting = (appointmentId, patientId, caregiverId) => {
   const caregiverToken = crypto.randomBytes(32).toString('hex');
 
   // Generate app URL (not direct Jitsi URL)
-  const appUrl = process.env.FRONTEND_URL || 'http://localhost:8080';
+  const appUrl = getPrimaryFrontendUrl() || 'http://localhost:8080';
 
   return {
     roomName,
