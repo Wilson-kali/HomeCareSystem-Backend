@@ -10,7 +10,7 @@ module.exports = {
     currency: 'MWK', // Malawi Kwacha
     environment: process.env.NODE_ENV || 'development',
     convenienceFeePercentage: parseFloat(process.env.PAYMENT_CONVENIENCE_FEE_PERCENTAGE) || 2,
-    taxRate: parseFloat(process.env.PAYMENT_TAX_RATE) || 16.5, // Malawi VAT rate
+    taxRate: parseFloat(process.env.PAYMENT_TAX_RATE) || 17.5, // Malawi VAT rate
     platformCommissionRate: parseFloat(process.env.PLATFORM_COMMISSION_RATE) || 20, // Platform commission percentage
     // Withdrawal fees
     withdrawalFees: {

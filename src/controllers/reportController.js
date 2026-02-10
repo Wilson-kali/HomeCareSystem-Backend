@@ -91,10 +91,28 @@ const getReports = async (req, res, next) => {
   try {
     const { page = 1, limit = 10, patientId } = req.query;
     const offset = (page - 1) * limit;
+    const { USER_ROLES } = require('../utils/constants');
 
     let whereClause = {};
+    let appointmentWhere = {};
+
+    // Filter reports based on user role
+    if (req.user.role === USER_ROLES.PATIENT) {
+      const patient = await Patient.findOne({ where: { userId: req.user.id } });
+      if (patient) {
+        appointmentWhere.patientId = patient.id;
+      }
+    } else if (req.user.role === USER_ROLES.CAREGIVER) {
+      const caregiver = await Caregiver.findOne({ where: { userId: req.user.id } });
+      if (caregiver) {
+        appointmentWhere.caregiverId = caregiver.id;
+      }
+    }
+    // For admins/physicians, allow viewing all reports (no filter)
+
+    // Optional additional filter by patientId from query
     if (patientId) {
-      whereClause['$Appointment.patientId$'] = patientId;
+      appointmentWhere.patientId = patientId;
     }
 
     const reports = await CareSessionReport.findAndCountAll({
@@ -102,11 +120,13 @@ const getReports = async (req, res, next) => {
       include: [
         {
           model: Appointment,
+          where: Object.keys(appointmentWhere).length > 0 ? appointmentWhere : undefined,
+          required: true,
           include: [
             { model: Patient, include: [{ model: User }] },
-            { 
-              model: Caregiver, 
-              include: [{ 
+            {
+              model: Caregiver,
+              include: [{
                 model: User,
                 attributes: ['firstName', 'lastName', 'email']
               }]
