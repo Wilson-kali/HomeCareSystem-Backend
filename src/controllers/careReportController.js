@@ -115,13 +115,54 @@ const createOrUpdateCareReport = async (req, res, next) => {
     } else {
       // Create new report
       careReport = await CareSessionReport.create(reportData);
-      
+
+      // Unlock caregiver earnings for this appointment
+      try {
+        const { PaymentTransaction, CaregiverEarnings, sequelize } = require('../models');
+        const sessionFeePayment = await PaymentTransaction.findOne({
+          where: {
+            appointmentId: appointmentId,
+            paymentType: 'session_fee',
+            status: 'completed'
+          }
+        });
+
+        if (sessionFeePayment && sessionFeePayment.caregiverEarnings > 0) {
+          const unlockAmount = parseFloat(sessionFeePayment.caregiverEarnings);
+          const t = await sequelize.transaction();
+          try {
+            const earnings = await CaregiverEarnings.findOne({
+              where: { caregiverId: caregiver.id },
+              transaction: t,
+              lock: t.LOCK.UPDATE
+            });
+
+            if (earnings && parseFloat(earnings.lockedBalance) >= unlockAmount) {
+              await earnings.update({
+                lockedBalance: parseFloat(earnings.lockedBalance) - unlockAmount,
+                walletBalance: parseFloat(earnings.walletBalance) + unlockAmount
+              }, { transaction: t });
+              await t.commit();
+              console.log(`Unlocked ${unlockAmount} MWK for caregiver ${caregiver.id} (report for appointment ${appointmentId})`);
+            } else {
+              await t.rollback();
+              console.log(`No locked balance to unlock for caregiver ${caregiver.id}, appointment ${appointmentId}`);
+            }
+          } catch (unlockError) {
+            await t.rollback();
+            console.error('Error unlocking caregiver earnings:', unlockError);
+          }
+        }
+      } catch (earningsError) {
+        console.error('Error looking up earnings for unlock:', earningsError);
+      }
+
       // Create notification for new care report
       try {
         const fullAppointment = await Appointment.findByPk(appointmentId, {
           include: [{ model: Patient, include: [{ model: User }] }]
         });
-        
+
         await NotificationHelper.createCareReportNotifications({
           id: careReport.id,
           patientId: fullAppointment?.Patient?.User?.id,

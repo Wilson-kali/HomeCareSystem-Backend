@@ -27,6 +27,13 @@ const CaregiverEarnings = sequelize.define('CaregiverEarnings', {
     defaultValue: 0.00,
     field: 'wallet_balance',
     comment: 'Current available balance for withdrawal'
+  },
+  lockedBalance: {
+    type: DataTypes.DECIMAL(10, 2),
+    allowNull: false,
+    defaultValue: 0.00,
+    field: 'locked_balance',
+    comment: 'Earnings locked pending care report submission'
   }
 }, {
   tableName: 'caregiver_earnings',

@@ -359,7 +359,16 @@ const processWebhook = async (webhookData, signature) => {
 
         // Update caregiver earnings if caregiverEarnings exists
         if (actualTransaction.caregiverEarnings && actualTransaction.caregiverEarnings > 0) {
-          await updateCaregiverEarnings(appointment.caregiverId, actualTransaction.caregiverEarnings, t);
+          // Check if care report already exists (handles out-of-order webhook)
+          const { CareSessionReport } = require('../models');
+          const existingReport = await CareSessionReport.findOne({
+            where: { appointmentId: appointment.id },
+            transaction: t
+          });
+
+          // Lock earnings until care report is uploaded (unless report already exists)
+          const shouldLock = !existingReport;
+          await updateCaregiverEarnings(appointment.caregiverId, actualTransaction.caregiverEarnings, t, shouldLock);
         }
 
         logger.info(`Session fee payment ${actualTransaction.id} completed for appointment ${appointment.id}`);
@@ -527,9 +536,13 @@ const processWebhook = async (webhookData, signature) => {
 
 /**
  * Update Caregiver Earnings
- * Add earnings to caregiver's total and wallet balance
+ * Add earnings to caregiver's total and wallet/locked balance
+ * @param {number} caregiverId
+ * @param {number} earnedAmount
+ * @param {object} transaction - Sequelize transaction
+ * @param {boolean} shouldLock - If true, add to lockedBalance instead of walletBalance
  */
-const updateCaregiverEarnings = async (caregiverId, earnedAmount, transaction = null) => {
+const updateCaregiverEarnings = async (caregiverId, earnedAmount, transaction = null, shouldLock = false) => {
   try {
     // Find or create caregiver earnings record
     const [earnings] = await CaregiverEarnings.findOrCreate({
@@ -537,18 +550,27 @@ const updateCaregiverEarnings = async (caregiverId, earnedAmount, transaction = 
       defaults: {
         caregiverId: caregiverId,
         totalCaregiverEarnings: 0,
-        walletBalance: 0
+        walletBalance: 0,
+        lockedBalance: 0
       },
       transaction
     });
 
-    // Update earnings - add to both total and wallet balance
-    await earnings.update({
-      totalCaregiverEarnings: parseFloat(earnings.totalCaregiverEarnings) + parseFloat(earnedAmount),
-      walletBalance: parseFloat(earnings.walletBalance) + parseFloat(earnedAmount)
-    }, { transaction });
+    const updateData = {
+      totalCaregiverEarnings: parseFloat(earnings.totalCaregiverEarnings) + parseFloat(earnedAmount)
+    };
 
-    logger.info(`Updated caregiver ${caregiverId} earnings: +${earnedAmount} MWK`);
+    if (shouldLock) {
+      // Lock earnings until care report is submitted
+      updateData.lockedBalance = parseFloat(earnings.lockedBalance || 0) + parseFloat(earnedAmount);
+    } else {
+      // Add directly to available wallet balance
+      updateData.walletBalance = parseFloat(earnings.walletBalance) + parseFloat(earnedAmount);
+    }
+
+    await earnings.update(updateData, { transaction });
+
+    logger.info(`Updated caregiver ${caregiverId} earnings: +${earnedAmount} MWK (locked: ${shouldLock})`);
     return earnings;
   } catch (error) {
     logger.error('Failed to update caregiver earnings:', error);

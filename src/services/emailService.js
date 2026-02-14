@@ -1,33 +1,35 @@
-const { Resend } = require('resend');
+const nodemailer = require('nodemailer');
 const logger = require('../utils/logger');
 const { getPrimaryFrontendUrl } = require('../utils/config');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: parseInt(process.env.SMTP_PORT, 10),
+  secure: process.env.SMTP_SECURE === 'true',
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
 
 const sendEmail = async (to, subject, html) => {
   try {
     console.log('🔄 Attempting to send email...');
     console.log('📧 To:', to);
     console.log('📝 Subject:', subject);
-    console.log('🔑 API Key exists:', !!process.env.RESEND_API_KEY);
     console.log('📤 From:', `${process.env.MAIL_FROM_NAME} <${process.env.MAIL_FROM_ADDRESS}>`);
 
-    const { data, error } = await resend.emails.send({
+    const info = await transporter.sendMail({
       from: `${process.env.MAIL_FROM_NAME} <${process.env.MAIL_FROM_ADDRESS}>`,
-      to: [to],
+      to,
       subject,
-      html
+      html,
     });
 
-    if (error) {
-      console.error('❌ Resend API Error:', error);
-      throw error;
-    }
-
     console.log('✅ Email sent successfully!');
-    console.log('📨 Email ID:', data.id);
-    logger.info(`Email sent: ${data.id}`);
-    return data;
+    console.log('📨 Message ID:', info.messageId);
+    logger.info(`Email sent: ${info.messageId}`);
+    return { id: info.messageId };
   } catch (error) {
     console.error('💥 Email sending failed:', error);
     logger.error('Email sending failed:', error);

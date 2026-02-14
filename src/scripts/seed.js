@@ -3,21 +3,20 @@ const { sequelize, Role, Permission, RolePermission, Specialty } = require('../m
 async function seedDatabase() {
   try {
     console.log('🔄 Seeding database with initial data...');
-    
+
     // Ensure database connection is open
     await sequelize.authenticate();
 
     // Seed Roles
-    const roles = await Role.bulkCreate([
+    await Role.bulkCreate([
       { name: 'patient', description: 'Patient role with basic access' },
       { name: 'caregiver', description: 'Caregiver role with care management access' },
-      { name: 'primary_physician', description: 'Primary physician role with medical oversight' },
       { name: 'regional_manager', description: 'Regional manager role with regional oversight' },
       { name: 'system_manager', description: 'System manager role with full system access' }
     ], { ignoreDuplicates: true });
 
     // Seed Permissions
-    const permissions = await Permission.bulkCreate([
+    await Permission.bulkCreate([
       { name: 'view_dashboard', description: 'View dashboard' },
       { name: 'manage_appointments', description: 'Create and manage appointments' },
       { name: 'view_appointments', description: 'View appointments' },
@@ -29,61 +28,60 @@ async function seedDatabase() {
       { name: 'view_reports', description: 'View care reports' },
       { name: 'manage_users', description: 'Manage system users' },
       { name: 'view_users', description: 'View system users' },
-      { name: 'system_admin', description: 'Full system administration' }
+      { name: 'system_admin', description: 'Full system administration' },
+      { name: 'approve_caregivers', description: 'Approve or reject caregiver accounts' },
+      { name: 'create_users', description: 'Create new user accounts' },
+      { name: 'view_permissions', description: 'View system permissions' },
+      { name: 'assign_permissions', description: 'Assign permissions to roles' },
+      { name: 'view_withdrawal_requests', description: 'View withdrawal requests' },
+      { name: 'view_financial_reports', description: 'View financial reports' },
+      { name: 'create_specialties', description: 'Create new specialties' },
+      { name: 'edit_specialties', description: 'Edit specialties' },
+      { name: 'delete_specialties', description: 'Delete specialties' },
+      { name: 'delete_users', description: 'Delete inactive or deactivated users' },
+      { name: 'view_paychangu_balance', description: 'View PayChangu account balance' },
     ], { ignoreDuplicates: true });
 
-    // Assign permissions to roles
+    // Fetch actual roles and permissions from DB to get real IDs
+    const allRoles = await Role.findAll();
+    const allPerms = await Permission.findAll();
+
+    const roleMap = {};
+    allRoles.forEach(r => { roleMap[r.name] = r.id; });
+
+    const permMap = {};
+    allPerms.forEach(p => { permMap[p.name] = p.id; });
+
+    console.log('📋 Role IDs:', roleMap);
+    console.log('📋 Permission IDs:', permMap);
+
+    // Helper to build role-permission entries by name
+    const rp = (roleName, permNames) =>
+      permNames.map(pn => ({ role_id: roleMap[roleName], permission_id: permMap[pn] }));
+
     const rolePermissions = [
-      // Patient permissions (role_id: 1)
-      { role_id: 1, permission_id: 1 }, // view_dashboard
-      { role_id: 1, permission_id: 3 }, // view_appointments
-      { role_id: 1, permission_id: 7 }, // view_caregivers
-      { role_id: 1, permission_id: 9 }, // view_reports
-      
-      // Caregiver permissions (role_id: 2)
-      { role_id: 2, permission_id: 1 }, // view_dashboard
-      { role_id: 2, permission_id: 2 }, // manage_appointments
-      { role_id: 2, permission_id: 3 }, // view_appointments
-      { role_id: 2, permission_id: 5 }, // view_patients
-      { role_id: 2, permission_id: 8 }, // manage_reports
-      { role_id: 2, permission_id: 9 }, // view_reports
-      
-      // Primary physician permissions (role_id: 3)
-      { role_id: 3, permission_id: 1 }, // view_dashboard
-      { role_id: 3, permission_id: 3 }, // view_appointments
-      { role_id: 3, permission_id: 4 }, // manage_patients
-      { role_id: 3, permission_id: 5 }, // view_patients
-      { role_id: 3, permission_id: 7 }, // view_caregivers
-      { role_id: 3, permission_id: 8 }, // manage_reports
-      { role_id: 3, permission_id: 9 }, // view_reports
-      
-      // Regional manager permissions (role_id: 4)
-      { role_id: 4, permission_id: 1 }, // view_dashboard
-      { role_id: 4, permission_id: 2 }, // manage_appointments
-      { role_id: 4, permission_id: 3 }, // view_appointments
-      { role_id: 4, permission_id: 4 }, // manage_patients
-      { role_id: 4, permission_id: 5 }, // view_patients
-      { role_id: 4, permission_id: 6 }, // manage_caregivers
-      { role_id: 4, permission_id: 7 }, // view_caregivers
-      { role_id: 4, permission_id: 8 }, // manage_reports
-      { role_id: 4, permission_id: 9 }, // view_reports
-      { role_id: 4, permission_id: 11 }, // view_users
-      
-      // System manager permissions (role_id: 5) - all permissions
-      { role_id: 5, permission_id: 1 }, // view_dashboard
-      { role_id: 5, permission_id: 2 }, // manage_appointments
-      { role_id: 5, permission_id: 3 }, // view_appointments
-      { role_id: 5, permission_id: 4 }, // manage_patients
-      { role_id: 5, permission_id: 5 }, // view_patients
-      { role_id: 5, permission_id: 6 }, // manage_caregivers
-      { role_id: 5, permission_id: 7 }, // view_caregivers
-      { role_id: 5, permission_id: 8 }, // manage_reports
-      { role_id: 5, permission_id: 9 }, // view_reports
-      { role_id: 5, permission_id: 10 }, // manage_users
-      { role_id: 5, permission_id: 11 }, // view_users
-      { role_id: 5, permission_id: 12 }  // system_admin
+      // Patient permissions
+      ...rp('patient', [
+        'view_dashboard', 'view_appointments', 'view_caregivers', 'view_reports'
+      ]),
+
+      // Caregiver permissions
+      ...rp('caregiver', [
+        'view_dashboard', 'manage_appointments', 'view_appointments',
+        'view_patients', 'manage_reports', 'view_reports'
+      ]),
+
+      // Regional manager permissions
+      ...rp('regional_manager', [
+        'view_dashboard', 'manage_appointments', 'view_appointments',
+        'manage_patients', 'view_patients', 'manage_caregivers',
+        'view_caregivers', 'manage_reports', 'view_reports', 'view_users'
+      ]),
+
+      // System manager permissions - all permissions
+      ...rp('system_manager', Object.keys(permMap)),
     ];
-    
+
     await RolePermission.bulkCreate(rolePermissions, { ignoreDuplicates: true });
 
     // Seed Specialties

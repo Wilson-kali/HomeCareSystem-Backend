@@ -667,7 +667,7 @@ router.get('/caregivers/:caregiverId/transactions', async (req, res, next) => {
   }
 });
 
-router.delete('/users/:userId', requirePermission('approve_caregivers'), async (req, res, next) => {
+router.delete('/users/:userId', requirePermission('delete_users'), async (req, res, next) => {
   try {
     const { User, Caregiver, Role } = require('../models');
 
@@ -682,21 +682,21 @@ router.delete('/users/:userId', requirePermission('approve_caregivers'), async (
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Only allow deletion of rejected caregivers
-    if (user.Role?.name === 'caregiver' && user.Caregiver) {
-      if (user.Caregiver.verificationStatus !== 'REJECTED') {
-        return res.status(403).json({
-          error: 'Only rejected caregivers can be deleted',
-          verificationStatus: user.Caregiver.verificationStatus
-        });
-      }
-    } else {
+    // Prevent deleting yourself
+    if (user.id === req.user.id) {
+      return res.status(403).json({ error: 'You cannot delete your own account' });
+    }
+
+    // Only allow deletion of inactive/deactivated users or rejected caregivers
+    const isInactive = !user.isActive;
+    const isRejectedCaregiver = user.Role?.name === 'caregiver' && user.Caregiver?.verificationStatus === 'REJECTED';
+
+    if (!isInactive && !isRejectedCaregiver) {
       return res.status(403).json({
-        error: 'Only caregivers can be deleted through this endpoint'
+        error: 'Only inactive/deactivated users or rejected caregivers can be deleted. Deactivate the user first.'
       });
     }
 
-    // Delete the user (cascade will delete associated caregiver record)
     await user.destroy();
 
     res.json({
@@ -1003,6 +1003,7 @@ router.get('/withdrawals/overview', requirePermission('view_withdrawal_requests'
         phone: caregiver.User.phone,
         totalEarnings: parseFloat(earnings.totalCaregiverEarnings || 0).toFixed(2),
         availableBalance: parseFloat(earnings.walletBalance || 0).toFixed(2),
+        lockedBalance: parseFloat(earnings.lockedBalance || 0).toFixed(2),
         totalWithdrawals: parseInt(wStat.totalWithdrawals || 0),
         totalWithdrawn: parseFloat(wStat.totalWithdrawn || 0).toFixed(2),
         lastWithdrawal: wStat.lastWithdrawal || null,
@@ -1115,6 +1116,10 @@ router.get('/withdrawals/stats', requirePermission('view_withdrawal_requests'), 
       where: earningsWhere
     }) || 0;
 
+    const totalLockedBalance = await CaregiverEarnings.sum('lockedBalance', {
+      where: earningsWhere
+    }) || 0;
+
     const monthlyStats = await WithdrawalRequest.findAll({
       attributes: [
         [sequelize.fn('DATE_FORMAT', sequelize.col('requested_at'), '%Y-%m'), 'month'],
@@ -1138,10 +1143,35 @@ router.get('/withdrawals/stats', requirePermission('view_withdrawal_requests'), 
         totalPending,
         totalProcessed,
         totalAvailableBalance,
+        totalLockedBalance,
         monthlyStats
       }
     });
   } catch (error) {
+    next(error);
+  }
+});
+
+// Get PayChangu wallet balance (live balance from payment provider)
+router.get('/withdrawals/paychangu-balance', requirePermission('view_paychangu_balance'), async (req, res, next) => {
+  try {
+    const axios = require('axios');
+    const paymentConfig = require('../config/payment');
+
+    const response = await axios.get(`${paymentConfig.paychangu.apiUrl}/wallet-balance`, {
+      params: { currency: 'MWK' },
+      headers: {
+        'Accept': 'application/json',
+        'Authorization': `Bearer ${paymentConfig.paychangu.secretKey}`
+      }
+    });
+
+    res.json({
+      success: true,
+      balance: response.data.data
+    });
+  } catch (error) {
+    console.error('Failed to fetch PayChangu balance:', error.response?.data || error.message);
     next(error);
   }
 });

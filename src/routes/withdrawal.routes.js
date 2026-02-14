@@ -164,7 +164,8 @@ router.get('/balance', async (req, res, next) => {
       defaults: {
         caregiverId: caregiver.id,
         totalCaregiverEarnings: 0,
-        walletBalance: 0
+        walletBalance: 0,
+        lockedBalance: 0
       }
     });
 
@@ -172,6 +173,7 @@ router.get('/balance', async (req, res, next) => {
       caregiverId: caregiver.id,
       totalEarnings: parseFloat(earnings.totalCaregiverEarnings).toFixed(2),
       availableBalance: parseFloat(earnings.walletBalance).toFixed(2),
+      lockedBalance: parseFloat(earnings.lockedBalance || 0).toFixed(2),
       currency: 'MWK'
     });
   } catch (error) {
