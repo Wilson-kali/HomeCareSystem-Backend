@@ -4,6 +4,70 @@ const { Op, sequelize } = require('sequelize');
 
 const router = express.Router();
 
+// Get specialties with caregiver counts
+router.get('/specialties', async (req, res, next) => {
+  try {
+    const { Specialty, Caregiver, User, Role, Appointment, sequelize } = require('../models');
+
+    const specialties = await Specialty.findAll({
+      attributes: [
+        'id',
+        'name',
+        'description',
+        [
+          sequelize.literal(`(
+            SELECT COUNT(DISTINCT c.id)
+            FROM caregivers c
+            INNER JOIN caregiverspecialties cs ON c.id = cs.caregiverId
+            INNER JOIN users u ON c.userId = u.id
+            WHERE cs.specialtyId = Specialty.id
+            AND c.verificationStatus = 'APPROVED'
+            AND u.isActive = 1
+          )`),
+          'caregiverCount'
+        ]
+      ],
+      order: [['name', 'ASC']]
+    });
+
+    // Get total approved caregivers
+    const caregiverRole = await Role.findOne({ where: { name: 'caregiver' } });
+    const totalCaregivers = await User.count({
+      where: { role_id: caregiverRole.id, isActive: true },
+      include: [{
+        model: Caregiver,
+        required: true,
+        where: { verificationStatus: 'APPROVED' }
+      }]
+    });
+
+    // Get average rating
+    const ratingStats = await Appointment.findAll({
+      where: { patient_rating: { [Op.not]: null } },
+      attributes: [
+        [sequelize.fn('AVG', sequelize.col('patient_rating')), 'averageRating']
+      ],
+      raw: true
+    });
+
+    res.json({
+      success: true,
+      specialties: specialties.map(s => ({
+        id: s.id,
+        name: s.name,
+        description: s.description,
+        caregiverCount: parseInt(s.dataValues.caregiverCount) || 0
+      })),
+      stats: {
+        totalCaregivers,
+        averageRating: ratingStats[0]?.averageRating ? parseFloat(ratingStats[0].averageRating).toFixed(1) : '4.9'
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Get active caregivers (all verification statuses)
 router.get('/caregivers', async (req, res, next) => {
   try {
@@ -25,7 +89,11 @@ router.get('/caregivers', async (req, res, next) => {
         { firstName: { [Op.like]: `%${search}%` } },
         { lastName: { [Op.like]: `%${search}%` } },
         { phone: { [Op.like]: `%${search}%` } },
-        { email: { [Op.like]: `%${search}%` } }
+        { email: { [Op.like]: `%${search}%` } },
+        sequelize.where(
+          sequelize.fn('CONCAT', sequelize.col('firstName'), ' ', sequelize.col('lastName')),
+          { [Op.like]: `%${search}%` }
+        )
       ];
     }
 
