@@ -1536,6 +1536,7 @@ module.exports = {
   sendCancellationNotification,
   sendUserWelcomeEmail,
   sendDataProtectionNotification,
+  sendCustomMessageToCaregiver,
   sendWithdrawalTokenEmail,
   sendWithdrawalSuccessEmail,
   sendReferralInvitation,
