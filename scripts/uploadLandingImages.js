@@ -4,9 +4,9 @@ const path = require('path');
 
 // Configure Cloudinary
 cloudinary.config({
-  cloud_name: 'dmpcgydyf',
-  api_key: '696377269556728',
-  api_secret: '9PZVzl7s0k8VOuXUxah-Z6oT_xg'
+  cloud_name: '',
+  api_key: '',
+  api_secret: ''
 });
 
 const publicFolder = path.join(__dirname, '../../care-connect-enhance/public');
