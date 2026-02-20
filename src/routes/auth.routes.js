@@ -1,6 +1,6 @@
 const express = require('express');
 const { body } = require('express-validator');
-const { register, registerAdmin, login, getProfile, forgotPassword, resetPassword } = require('../controllers/authController');
+const { register, registerAdmin, login, logout, getProfile, forgotPassword, resetPassword } = require('../controllers/authController');
 const { authenticateToken } = require('../middleware/auth.middleware');
 const { handleValidationErrors } = require('../middleware/validator.middleware');
 const { uploadMultiple, handleMulterError } = require('../middleware/upload.middleware');
@@ -42,6 +42,7 @@ const resetPasswordValidation = [
 router.post('/register', uploadMultiple, handleMulterError, registerValidation, handleValidationErrors, register);
 router.post('/register-admin', adminRegisterValidation, handleValidationErrors, registerAdmin);
 router.post('/login', loginValidation, handleValidationErrors, login);
+router.post('/logout', logout);
 router.post('/forgot-password', forgotPasswordValidation, handleValidationErrors, forgotPassword);
 router.post('/reset-password', resetPasswordValidation, handleValidationErrors, resetPassword);
 router.get('/profile', authenticateToken, getProfile);

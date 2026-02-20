@@ -350,9 +350,17 @@ const register = asyncHandler(async (req, res, next) => {
     });
   } else {
     const token = generateToken(createdUser.id);
+    
+    // Set HttpOnly cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60 * 1000 // 1 day
+    });
+    
     res.status(201).json({
       message: 'Registration successful',
-      token,
       user: sanitizeUser(createdUser)
     });
   }
@@ -412,9 +420,16 @@ const registerAdmin = async (req, res, next) => {
     
     const token = generateToken(user.id);
     
+    // Set HttpOnly cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60 * 1000 // 1 day
+    });
+    
     res.status(201).json({
       message: 'Admin registration successful',
-      token,
       user: sanitizeUser(user)
     });
   } catch (error) {
@@ -484,9 +499,16 @@ const login = async (req, res, next) => {
     // Add permissions to user object
     sanitizedUser.permissions = user.Role?.Permissions?.map(p => p.name) || [];
     
+    // Set HttpOnly cookie
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 24 * 60 * 60 * 1000 // 1 day
+    });
+    
     res.json({
       message: 'Login successful',
-      token,
       user: sanitizedUser
     });
   } catch (error) {
@@ -615,10 +637,20 @@ const resetPassword = asyncHandler(async (req, res, next) => {
   res.json({ message: 'Password reset successfully' });
 });
 
+const logout = async (req, res) => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict'
+  });
+  res.json({ message: 'Logged out successfully' });
+};
+
 module.exports = {
   register,
   registerAdmin: asyncHandler(registerAdmin),
   login: asyncHandler(login),
+  logout,
   getProfile: asyncHandler(getProfile),
   forgotPassword: asyncHandler(forgotPassword),
   resetPassword: asyncHandler(resetPassword)
