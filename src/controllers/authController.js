@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
-const { User, Patient, Caregiver, PrimaryPhysician, Role, Referral } = require('../models');
+const { User, Patient, Caregiver, PrimaryPhysician, Role, Referral, CaregiverAvailability } = require('../models');
 const { jwtSecret, jwtExpiresIn, bcryptRounds } = require('../config/auth');
 const { USER_ROLES } = require('../utils/constants');
 const { sanitizeUser } = require('../utils/helpers');
@@ -14,30 +14,29 @@ const generateToken = (userId) => {
 };
 
 const register = asyncHandler(async (req, res, next) => {
+  const { email, password, firstName, lastName, phone, idNumber, role = 'patient', referralCode, ...roleSpecificData } = req.body;
+  const uploadedFiles = req.files || {};
+
+  console.log('📝 Registration data received:', {
+    email,
+    role,
+    referralCode: referralCode || 'NOT PROVIDED',
+    hasFiles: Object.keys(uploadedFiles).length > 0
+  });
+
+  // Pre-checks before opening any transaction — return HTTP responses directly to avoid
+  // unhandled rejection crashes caused by throwing inside executeWithRetry's catch block.
+  const userRole = await Role.findOne({ where: { name: role } });
+  if (!userRole) {
+    return res.status(400).json({ error: 'Invalid role specified' });
+  }
+
+  const existingUser = await User.findOne({ where: { email } });
+  if (existingUser) {
+    return res.status(409).json({ error: 'Email already registered' });
+  }
+
   const result = await executeWithRetry(async (transaction) => {
-    const { email, password, firstName, lastName, phone, idNumber, role = 'patient', referralCode, ...roleSpecificData } = req.body;
-    const uploadedFiles = req.files || {};
-
-    console.log('📝 Registration data received:', {
-      email,
-      role,
-      referralCode: referralCode || 'NOT PROVIDED',
-      hasFiles: Object.keys(uploadedFiles).length > 0
-    });
-
-    // Find the role
-    const userRole = await Role.findOne({ where: { name: role } });
-    if (!userRole) {
-      throw new Error('Invalid role specified');
-    }
-
-    const existingUser = await User.findOne({ where: { email } });
-    if (existingUser) {
-      const error = new Error('Email already registered');
-      error.statusCode = 409;
-      throw error;
-    }
-
     const hashedPassword = await bcrypt.hash(password, bcryptRounds);
     
     const user = await User.create({
@@ -237,6 +236,24 @@ const register = asyncHandler(async (req, res, next) => {
           await createdCaregiver.setSpecialties(specialtyIds, { transaction });
         }
 
+        // Handle availability if provided during registration (transactional - failure rolls back everything)
+        const availabilityRaw = req.body.availability;
+        if (availabilityRaw && createdCaregiver) {
+          const availabilitySlots = JSON.parse(availabilityRaw);
+          if (Array.isArray(availabilitySlots) && availabilitySlots.length > 0) {
+            await CaregiverAvailability.bulkCreate(
+              availabilitySlots.map(slot => ({
+                caregiverId: createdCaregiver.id,
+                dayOfWeek: parseInt(slot.dayOfWeek),
+                startTime: slot.startTime,
+                endTime: slot.endTime,
+                isActive: true
+              })),
+              { transaction }
+            );
+          }
+        }
+
         // Handle referral code if provided (caregiver-to-caregiver referral)
         if (referralCode) {
           console.log(`🎫 Processing caregiver referral code: ${referralCode}`);
@@ -309,22 +326,119 @@ const register = asyncHandler(async (req, res, next) => {
     return { createdUser, role, roleSpecificData };
   });
 
-  const { createdUser, role, roleSpecificData } = result;
+  const { createdUser } = result;
 
   // Create notifications for new caregiver registration (async, non-blocking)
   if (role === 'caregiver') {
     setImmediate(async () => {
       try {
         await NotificationHelper.createCaregiverVerificationNotifications(
-          createdUser.id, 
-          'PENDING', 
+          createdUser.id,
+          'PENDING',
           roleSpecificData.region
         );
       } catch (notificationError) {
         console.error('Failed to create caregiver registration notifications:', notificationError);
-        // Don't fail the registration process for notification errors
       }
     });
+
+    // Auto-generate time slots for availability set during registration
+    if (req.body.availability) {
+      setImmediate(async () => {
+        const MAX_RETRIES = 3;
+        const RETRY_DELAY_MS = 3000;
+
+        const generateSlots = async () => {
+          const { TimeSlot } = require('../models');
+          const { TIMESLOT_STATUS } = require('../utils/constants');
+
+          const caregiver = await Caregiver.findOne({ where: { userId: createdUser.id } });
+          if (!caregiver) throw new Error(`Caregiver not found for userId ${createdUser.id}`);
+
+          const savedAvailability = await CaregiverAvailability.findAll({
+            where: { caregiverId: caregiver.id }
+          });
+          if (!savedAvailability.length) return;
+
+          const startDate = new Date().toISOString().split('T')[0];
+          const endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+
+          const allSlots = [];
+          for (const availability of savedAvailability) {
+            const start = new Date(startDate);
+            const end = new Date(endDate);
+
+            for (let date = new Date(start); date <= end; date.setDate(date.getDate() + 1)) {
+              if (Number(availability.dayOfWeek) !== date.getDay()) continue;
+
+              const slotStart = new Date(`${date.toDateString()} ${availability.startTime}`);
+              const slotEnd = new Date(`${date.toDateString()} ${availability.endTime}`);
+
+              while (slotStart < slotEnd) {
+                const slotEndTime = new Date(slotStart.getTime() + caregiver.appointmentDuration * 60000);
+                if (slotEndTime <= slotEnd) {
+                  allSlots.push({
+                    caregiverId: caregiver.id,
+                    date: date.toISOString().split('T')[0],
+                    startTime: slotStart.toTimeString().split(' ')[0],
+                    endTime: slotEndTime.toTimeString().split(' ')[0],
+                    duration: caregiver.appointmentDuration,
+                    price: Math.round((caregiver.hourlyRate * caregiver.appointmentDuration) / 60),
+                    status: TIMESLOT_STATUS.AVAILABLE,
+                    availabilityId: availability.id
+                  });
+                }
+                slotStart.setTime(slotStart.getTime() + caregiver.appointmentDuration * 60000);
+              }
+            }
+          }
+
+          if (allSlots.length > 0) {
+            await TimeSlot.bulkCreate(allSlots, { ignoreDuplicates: true });
+            console.log(`✅ Auto-generated ${allSlots.length} time slots for caregiver ${caregiver.id}`);
+          }
+        };
+
+        const NotificationService = require('../services/notificationService');
+        let succeeded = false;
+
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            await generateSlots();
+            succeeded = true;
+            break; // success - stop retrying
+          } catch (err) {
+            console.error(`Time slot generation attempt ${attempt}/${MAX_RETRIES} failed:`, err.message);
+            if (attempt < MAX_RETRIES) {
+              await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * attempt));
+            }
+          }
+        }
+
+        try {
+          if (succeeded) {
+            await NotificationService.createNotification({
+              userId: createdUser.id,
+              title: 'Schedule Ready',
+              message: 'Your availability has been saved and your time slots have been generated for the next 30 days. Patients can now book appointments with you.',
+              type: 'system',
+              priority: 'medium'
+            });
+          } else {
+            console.warn(`⚠️ All ${MAX_RETRIES} slot generation attempts failed for caregiver userId ${createdUser.id}.`);
+            await NotificationService.createNotification({
+              userId: createdUser.id,
+              title: 'Action Required: Generate Your Time Slots',
+              message: 'Your availability was saved but we could not auto-generate your time slots. Please go to Schedule → Availability and click "Generate Slots" for each day to make yourself bookable.',
+              type: 'system',
+              priority: 'high'
+            });
+          }
+        } catch (notifError) {
+          console.error('Failed to send slot generation notification:', notifError.message);
+        }
+      });
+    }
   }
   
   // Send data protection notification email for all registrations
