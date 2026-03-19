@@ -224,4 +224,47 @@ router.get('/caregivers', async (req, res, next) => {
   }
 });
 
+// GET /public/stats — platform metrics with minimum floor values
+router.get('/stats', async (req, res, next) => {
+  try {
+    const { User, Role, Caregiver, Appointment, Patient, sequelize } = require('../models');
+
+    const MINIMUMS = { patients: 500, sessions: 1000 };
+
+    // Real patient count
+    const patientRole = await Role.findOne({ where: { name: 'patient' } });
+    const realPatients = patientRole ? await User.count({ where: { role_id: patientRole.id, isActive: true } }) : 0;
+
+    // Real approved caregiver count
+    const caregiverRole = await Role.findOne({ where: { name: 'caregiver' } });
+    const realCaregivers = caregiverRole ? await User.count({
+      where: { role_id: caregiverRole.id, isActive: true },
+      include: [{ model: Caregiver, required: true, where: { verificationStatus: 'APPROVED' } }]
+    }) : 0;
+
+    // Real completed sessions count
+    const realSessions = await Appointment.count({ where: { status: 'COMPLETED' } });
+
+    // Real average rating
+    const ratingResult = await Appointment.findOne({
+      where: { patient_rating: { [Op.not]: null }, status: 'COMPLETED' },
+      attributes: [[sequelize.fn('AVG', sequelize.col('patient_rating')), 'avg']],
+      raw: true
+    });
+    const realRating = ratingResult?.avg ? parseFloat(ratingResult.avg).toFixed(1) : null;
+
+    res.json({
+      success: true,
+      stats: {
+        patients: Math.max(realPatients, MINIMUMS.patients),
+        caregivers: realCaregivers,
+        sessions: Math.max(realSessions, MINIMUMS.sessions),
+        averageRating: realRating || '4.9'
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 module.exports = router;
