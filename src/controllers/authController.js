@@ -36,6 +36,18 @@ const register = asyncHandler(async (req, res, next) => {
     return res.status(409).json({ error: 'Email already registered' });
   }
 
+  const existingPhone = await User.findOne({ where: { phone } });
+  if (existingPhone) {
+    return res.status(409).json({ error: 'Phone number already registered' });
+  }
+
+  if (idNumber) {
+    const existingIdNumber = await User.findOne({ where: { idNumber } });
+    if (existingIdNumber) {
+      return res.status(409).json({ error: 'ID number already registered' });
+    }
+  }
+
   const result = await executeWithRetry(async (transaction) => {
     const hashedPassword = await bcrypt.hash(password, bcryptRounds);
     
@@ -497,6 +509,12 @@ const registerAdmin = async (req, res, next) => {
     if (existingUser) {
       await transaction.rollback();
       return res.status(409).json({ error: 'Email already registered' });
+    }
+
+    const existingPhone = await User.findOne({ where: { phone } });
+    if (existingPhone) {
+      await transaction.rollback();
+      return res.status(409).json({ error: 'Phone number already registered' });
     }
 
     const hashedPassword = await bcrypt.hash(password, bcryptRounds);
